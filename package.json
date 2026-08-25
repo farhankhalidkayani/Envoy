@@ -1,0 +1,33 @@
+{
+  "name": "envoy",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@10.12.4",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "db:generate": "pnpm --filter @envoy/db generate",
+    "db:migrate": "pnpm --filter @envoy/db migrate:dev",
+    "db:studio": "pnpm --filter @envoy/db studio"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0",
+    "typescript": "^5.7.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@nestjs/core",
+      "@prisma/client",
+      "@prisma/engines",
+      "@swc/core",
+      "bcrypt",
+      "esbuild",
+      "prisma"
+    ]
+  }
+}

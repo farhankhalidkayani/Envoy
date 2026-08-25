@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Acme Co — demo site</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        max-width: 640px;
+        margin: 80px auto;
+        padding: 0 24px;
+        color: #171b23;
+      }
+      h1 { font-size: 28px; }
+      code {
+        display: block;
+        background: #f3f6f9;
+        padding: 16px;
+        border-radius: 8px;
+        margin-top: 24px;
+        font-size: 13px;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Acme Co</h1>
+    <p>
+      This is a stand-in for a client's website — it embeds the Envoy widget exactly the way a real
+      tenant would, via the copy-pasteable snippet below. Nothing on this page knows anything about
+      Envoy's internals; the iframe is the entire integration surface.
+    </p>
+    <p>
+      Open this page with <code>?token=PUBLIC_TOKEN</code> in the URL, using a live agent's
+      <code>publicToken</code> (create one via <code>POST /agents</code>, then
+      <code>PATCH /agents/:id</code> with <code>{"status":"live"}</code>).
+    </p>
+
+    <code id="snippet"></code>
+
+    <script>
+      var token = new URLSearchParams(window.location.search).get("token") || "PUBLIC_TOKEN";
+      document.getElementById("snippet").textContent =
+        '<script src="http://localhost:5173/loader.js" data-agent="' + token + '"><' + '/script>';
+
+      // The actual embed — a real client site would write this <script> tag
+      // directly with a hardcoded data-agent; it's created dynamically here
+      // only so this one demo file can be reused with any agent via ?token=.
+      var loaderScript = document.createElement("script");
+      loaderScript.src = "/loader.js";
+      loaderScript.setAttribute("data-agent", token);
+      document.body.appendChild(loaderScript);
+    </script>
+  </body>
+</html>

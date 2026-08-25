@@ -1,0 +1,207 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────
+
+enum SubscriptionStatus {
+  active
+  past_due
+  locked
+  cancelled
+}
+
+enum UserRole {
+  owner
+  staff
+  platform_admin
+}
+
+enum AgentStatus {
+  draft
+  live
+  paused
+}
+
+enum ConversationChannel {
+  chat
+  voice
+}
+
+enum ConversationStatus {
+  in_progress
+  completed
+  abandoned
+}
+
+enum OutcomeType {
+  demo_booking
+  order
+  complaint
+  appointment
+}
+
+enum CrmProvider {
+  hubspot
+  zoho
+}
+
+// ─────────────────────────────────────────────────────────────
+// Core tenancy
+// ─────────────────────────────────────────────────────────────
+
+model Tenant {
+  id                 String             @id @default(cuid())
+  name               String
+  industry           String?
+  subscriptionStatus SubscriptionStatus @default(active)
+  priceConfig        Json               @default("{}")
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  users          User[]
+  agents         Agent[]
+  conversations  Conversation[]
+  crmConnections CrmConnection[]
+  subscription   Subscription?
+  auditLogs      AuditLog[]
+
+  @@map("tenants")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  tenantId      String?
+  tenant        Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  email         String   @unique
+  passwordHash  String
+  role          UserRole @default(owner)
+  featureAccess Json     @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  auditLogs AuditLog[]
+
+  @@index([tenantId])
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Agent configuration
+// ─────────────────────────────────────────────────────────────
+
+model Agent {
+  id             String      @id @default(cuid())
+  tenantId       String
+  tenant         Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name           String
+  status         AgentStatus @default(draft)
+  script         String      @default("")
+  requiredFields Json        @default("[]")
+  hardRules      Json        @default("[]")
+  widgetConfig   Json        @default("{}")
+  publicToken    String      @unique @default(cuid())
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  conversations Conversation[]
+
+  @@index([tenantId])
+  @@map("agents")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Conversations
+// ─────────────────────────────────────────────────────────────
+
+model Conversation {
+  id                    String              @id @default(cuid())
+  agentId               String
+  agent                 Agent               @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  tenantId              String
+  tenant                Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  channel               ConversationChannel @default(chat)
+  status                ConversationStatus  @default(in_progress)
+  outcomeType           OutcomeType?
+  capturedData          Json                @default("{}")
+  transcriptText        String?
+  aiSummary             String?
+  ruleViolationsBlocked Json                @default("[]")
+  recordingUrl          String?
+  crmPushedAt           DateTime?
+  crmExternalId         String?
+  crmPushError          String?
+  createdAt             DateTime            @default(now())
+  completedAt           DateTime?
+
+  @@index([tenantId])
+  @@index([agentId])
+  @@map("conversations")
+}
+
+// ─────────────────────────────────────────────────────────────
+// CRM
+// ─────────────────────────────────────────────────────────────
+
+model CrmConnection {
+  id           String      @id @default(cuid())
+  tenantId     String
+  tenant       Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  provider     CrmProvider
+  oauthTokens  String // encrypted at rest by the application layer
+  fieldMapping Json        @default("{}")
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@unique([tenantId, provider])
+  @@map("crm_connections")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Billing
+// ─────────────────────────────────────────────────────────────
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  tenantId             String             @unique
+  tenant               Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  status               SubscriptionStatus @default(active)
+  monthlyRate          Int // cents
+  usageRate            Int // cents per conversation over included allotment
+  includedConversations Int               @default(0)
+  billingCycleDay      Int                @default(1)
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  lockedAt             DateTime?
+  unlockedAt           DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@map("subscriptions")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Audit
+// ─────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  adminUserId  String
+  adminUser    User     @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  tenantId     String?
+  tenant       Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  action       String
+  meta         Json     @default("{}")
+  createdAt    DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([adminUserId])
+  @@map("audit_logs")
+}
