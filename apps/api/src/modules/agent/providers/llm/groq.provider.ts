@@ -4,7 +4,9 @@ import { buildJudgeMessages, parseJudgeResponse } from "./judge-prompt.js";
 import type { JudgeVerdict, LlmCompleteRequest, LlmCompleteResult, LlmProvider } from "./types.js";
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-const DEFAULT_MODEL = "llama-3.3-70b-versatile";
+// llama-3.3-70b-versatile was retired from Groq's catalog; openai/gpt-oss-120b
+// is the current general-purpose chat model with comparable quality.
+const DEFAULT_MODEL = "openai/gpt-oss-120b";
 
 /** OpenAI-compatible chat completions API — https://console.groq.com/docs/api-reference */
 @Injectable()

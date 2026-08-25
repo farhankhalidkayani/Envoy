@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node --env-file=.env dist/main.js",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "seed": "tsx --env-file=.env scripts/seed.ts"
   },
   "dependencies": {
     "@envoy/db": "workspace:*",
@@ -39,6 +40,7 @@
     "@types/passport-jwt": "^4.0.1",
     "@types/ws": "^8.5.13",
     "concurrently": "^9.1.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "unplugin-swc": "^1.5.0",
     "vitest": "^2.1.0"

@@ -27,7 +27,10 @@ export function buildStableSystemPrompt(config: AgentPromptConfig): string {
   const fieldsList =
     config.requiredFields.length > 0
       ? config.requiredFields
-          .map((f) => `- ${f.key} (${f.label}, type: ${f.type}${f.required ? ", required" : ", optional"})`)
+          .map((f) => {
+            const base = `- ${f.key} (${f.label}, type: ${f.type}${f.required ? ", required" : ", optional"})`;
+            return f.prompt ? `${base} — ${f.prompt}` : base;
+          })
           .join("\n")
       : "(none)";
 
