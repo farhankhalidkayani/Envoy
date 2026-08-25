@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { AuthProvider } from "../lib/auth";
+import { ToastProvider } from "../components/Toast";
 import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({
@@ -19,7 +20,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={jakarta.variable}>
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <ToastProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </ToastProvider>
       </body>
     </html>
   );

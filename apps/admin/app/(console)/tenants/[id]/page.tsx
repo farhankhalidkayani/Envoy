@@ -9,12 +9,14 @@ import { FEATURE_KEYS } from "@envoy/types";
 import { api } from "../../../../lib/api";
 import { errorMessage } from "../../../../lib/errors";
 import { ConfirmDialog } from "../../../../components/ConfirmDialog";
+import { useToast } from "../../../../components/Toast";
 
 function centsLabel(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
 export default function TenantDetailPage() {
+  const { showToast } = useToast();
   const params = useParams<{ id: string }>();
   const [tenant, setTenant] = useState<AdminTenantDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +78,7 @@ export default function TenantDetailPage() {
         addOns: { crm: Boolean(existingAddOns?.crm), voice: voiceAddOn },
       });
       load();
+      showToast("Pricing updated.");
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -89,6 +92,7 @@ export default function TenantDetailPage() {
     try {
       await api.admin.updateUserAccess(params.id, userId, { [feature]: !current });
       load();
+      showToast(`${feature} turned ${!current ? "on" : "off"}.`);
     } catch (err) {
       setError(errorMessage(err));
     } finally {

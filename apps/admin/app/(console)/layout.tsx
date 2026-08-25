@@ -40,9 +40,14 @@ export default function ConsoleLayout({ children }: { children: ReactNode }) {
             const Icon = item.icon;
             const active = pathname?.startsWith(item.href) ?? false;
             return (
-              <Link key={item.href} href={item.href} className={`nav-link${active ? " active" : ""}`}>
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`nav-link${active ? " active" : ""}`}
+                aria-current={active ? "page" : undefined}
+              >
                 <Icon size={17} />
-                {item.label}
+                <span className="nav-link-label">{item.label}</span>
               </Link>
             );
           })}

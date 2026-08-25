@@ -6,10 +6,12 @@ import { useParams } from "next/navigation";
 import type { Agent } from "@envoy/sdk";
 import { api } from "../../../../lib/api";
 import { errorMessage } from "../../../../lib/errors";
+import { useToast } from "../../../../components/Toast";
 
 const WIDGET_ORIGIN = process.env.NEXT_PUBLIC_WIDGET_ORIGIN ?? "http://localhost:5173";
 
 export default function AgentDetailPage() {
+  const { showToast } = useToast();
   const params = useParams<{ id: string }>();
   const [agent, setAgent] = useState<Agent | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -23,10 +25,10 @@ export default function AgentDetailPage() {
     if (!agent) return;
     setPublishing(true);
     try {
-      const updated = await api.agents.update(agent.id, {
-        status: agent.status === "live" ? "paused" : "live",
-      });
+      const nextStatus = agent.status === "live" ? "paused" : "live";
+      const updated = await api.agents.update(agent.id, { status: nextStatus });
       setAgent(updated);
+      showToast(nextStatus === "live" ? "Agent published." : "Agent paused.");
     } catch (err) {
       setError(errorMessage(err));
     } finally {

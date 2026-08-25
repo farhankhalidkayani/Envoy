@@ -6,8 +6,10 @@ import { useParams } from "next/navigation";
 import type { Conversation } from "@envoy/sdk";
 import { api } from "../../../../lib/api";
 import { errorMessage } from "../../../../lib/errors";
+import { useToast } from "../../../../components/Toast";
 
 export default function ConversationDetailPage() {
+  const { showToast } = useToast();
   const params = useParams<{ id: string }>();
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -24,6 +26,7 @@ export default function ConversationDetailPage() {
     try {
       await api.crm.pushConversation(params.id);
       load();
+      showToast("Pushed to CRM.");
     } catch (err) {
       setError(errorMessage(err));
     } finally {

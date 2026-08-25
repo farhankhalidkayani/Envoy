@@ -6,6 +6,7 @@ import type { AdminTenant } from "@envoy/sdk";
 import { api } from "../../../lib/api";
 import { errorMessage } from "../../../lib/errors";
 import { ConfirmDialog } from "../../../components/ConfirmDialog";
+import { useToast } from "../../../components/Toast";
 import { BuildingIcon, CheckCircleIcon, AlertIcon, DollarIcon } from "../../../components/icons";
 
 type PendingAction =
@@ -20,6 +21,7 @@ const STATUS_PILL: Record<AdminTenant["subscriptionStatus"], string> = {
 };
 
 export default function TenantsPage() {
+  const { showToast } = useToast();
   const [tenants, setTenants] = useState<AdminTenant[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -31,12 +33,13 @@ export default function TenantsPage() {
 
   useEffect(load, []);
 
-  async function withBusy(id: string, action: () => Promise<void>) {
+  async function withBusy(id: string, action: () => Promise<void>, successMessage?: string) {
     setBusyId(id);
     setError(null);
     try {
       await action();
       load();
+      if (successMessage) showToast(successMessage);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -49,9 +52,9 @@ export default function TenantsPage() {
     const { kind, tenant } = pending;
     setPending(null);
     if (kind === "pause") {
-      await withBusy(tenant.id, () => api.admin.pauseTenant(tenant.id));
+      await withBusy(tenant.id, () => api.admin.pauseTenant(tenant.id), `${tenant.name} paused.`);
     } else {
-      await withBusy(tenant.id, () => api.admin.revokeTenant(tenant.id));
+      await withBusy(tenant.id, () => api.admin.revokeTenant(tenant.id), `${tenant.name} revoked.`);
     }
   }
 
@@ -153,7 +156,7 @@ export default function TenantsPage() {
                       <button
                         className="btn"
                         disabled={busyId === t.id}
-                        onClick={() => withBusy(t.id, () => api.admin.resumeTenant(t.id))}
+                        onClick={() => withBusy(t.id, () => api.admin.resumeTenant(t.id), `${t.name} resumed.`)}
                       >
                         Resume
                       </button>

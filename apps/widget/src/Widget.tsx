@@ -22,6 +22,30 @@ function getPublicToken(): string | null {
   return new URLSearchParams(window.location.search).get("token");
 }
 
+/** Three-dot "typing" indicator — used both while the agent is composing a
+ * reply and while the initial connection is being established, so a visitor
+ * never sits looking at a blank pane with no sense anything is happening. */
+function TypingDots() {
+  return (
+    <span style={{ display: "inline-flex", gap: 4 }}>
+      {[0, 150, 300].map((delay) => (
+        <span
+          key={delay}
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            background: "#9aa0ac",
+            display: "inline-block",
+            animation: "envoy-bounce 1s infinite ease-in-out",
+            animationDelay: `${delay}ms`,
+          }}
+        />
+      ))}
+    </span>
+  );
+}
+
 export function Widget() {
   const [status, setStatus] = useState<Status>("connecting");
   const [agent, setAgent] = useState<PublicAgent | null>(null);
@@ -29,6 +53,7 @@ export function Widget() {
   const [draft, setDraft] = useState("");
   const [errorText, setErrorText] = useState("");
   const [recording, setRecording] = useState<RecordingState>("idle");
+  const [awaitingReply, setAwaitingReply] = useState(false);
   const connectionRef = useRef<AgentConnection | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -61,13 +86,16 @@ export function Widget() {
                 setStatus("chatting");
                 break;
               case "agent.message":
+                setAwaitingReply(false);
                 setMessages((prev) => [...prev, { role: "agent", text: msg.text ?? "" }]);
                 break;
               case "transcript":
                 setRecording("idle");
                 setMessages((prev) => [...prev, { role: "user", text: msg.text, heard: true }]);
+                setAwaitingReply(true);
                 break;
               case "agent.audio": {
+                setAwaitingReply(false);
                 const audioEl = audioRef.current;
                 if (audioEl) {
                   audioEl.src = `data:${msg.mimeType};base64,${msg.chunk}`;
@@ -76,12 +104,15 @@ export function Widget() {
                 break;
               }
               case "session.completed":
+                setAwaitingReply(false);
                 setStatus("completed");
                 break;
               case "locked":
+                setAwaitingReply(false);
                 setStatus("locked");
                 break;
               case "error":
+                setAwaitingReply(false);
                 setStatus("error");
                 setErrorText(msg.message);
                 setRecording("idle");
@@ -108,7 +139,7 @@ export function Widget() {
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages]);
+  }, [messages, awaitingReply]);
 
   function submit(e: Event) {
     e.preventDefault();
@@ -116,6 +147,7 @@ export function Widget() {
     if (!text || status !== "chatting") return;
     setMessages((prev) => [...prev, { role: "user", text }]);
     connectionRef.current?.sendMessage(text);
+    setAwaitingReply(true);
     setDraft("");
   }
 
@@ -155,6 +187,15 @@ export function Widget() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <style>{`
+        @keyframes envoy-bounce {
+          0%, 80%, 100% { opacity: 0.3; transform: translateY(0); }
+          40% { opacity: 1; transform: translateY(-3px); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          @keyframes envoy-bounce { 0%, 100% { opacity: 0.6; } }
+        }
+      `}</style>
       <header
         style={{
           background: accent,
@@ -194,6 +235,38 @@ export function Widget() {
             </div>
           </div>
         ))}
+
+        {status === "connecting" && (
+          <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 8 }}>
+            <div
+              style={{
+                padding: "10px 12px",
+                borderRadius: 12,
+                background: "#f0f1f3",
+                display: "flex",
+                alignItems: "center",
+              }}
+            >
+              <TypingDots />
+            </div>
+          </div>
+        )}
+
+        {awaitingReply && status === "chatting" && (
+          <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 8 }}>
+            <div
+              style={{
+                padding: "10px 12px",
+                borderRadius: 12,
+                background: "#f0f1f3",
+                display: "flex",
+                alignItems: "center",
+              }}
+            >
+              <TypingDots />
+            </div>
+          </div>
+        )}
 
         {status === "locked" && (
           <div style={{ textAlign: "center", color: "#888", fontSize: 13, marginTop: 16 }}>

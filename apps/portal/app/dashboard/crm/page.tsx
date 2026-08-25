@@ -6,6 +6,7 @@ import type { CrmConnection } from "@envoy/sdk";
 import { api } from "../../../lib/api";
 import { errorMessage } from "../../../lib/errors";
 import { ConfirmDialog } from "../../../components/ConfirmDialog";
+import { useToast } from "../../../components/Toast";
 
 interface MappingRow {
   envoyKey: string;
@@ -13,6 +14,7 @@ interface MappingRow {
 }
 
 export default function CrmPage() {
+  const { showToast } = useToast();
   const [connection, setConnection] = useState<CrmConnection | null | undefined>(undefined);
   const [notEnabled, setNotEnabled] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,6 +50,7 @@ export default function CrmPage() {
     try {
       await api.crm.connect();
       load();
+      showToast("CRM connected.");
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -62,6 +65,7 @@ export default function CrmPage() {
     try {
       await api.crm.disconnect();
       load();
+      showToast("CRM disconnected.");
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -89,6 +93,7 @@ export default function CrmPage() {
       );
       await api.crm.updateMapping(mapping);
       load();
+      showToast("Field mapping saved.");
     } catch (err) {
       setError(errorMessage(err));
     } finally {

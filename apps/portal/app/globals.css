@@ -544,3 +544,93 @@ button:focus-visible {
   margin-top: 6px;
   font-weight: 500;
 }
+
+/* ───────────────────────── Toasts ───────────────────────── */
+
+.toast-stack {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 200;
+  max-width: 320px;
+}
+
+.toast {
+  background: var(--ink);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  font-weight: 600;
+  box-shadow: var(--shadow-lg);
+  animation: toast-in 0.15s ease;
+}
+
+.toast-error {
+  background: var(--stop);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Tables sit directly inside a zero-padding .card in every list screen —
+   scope the scroll to that pairing so a wide table never widens the page. */
+.card:has(> table) {
+  overflow-x: auto;
+}
+
+/* ───────────────────────── Responsive ───────────────────────── */
+
+@media (max-width: 860px) {
+  .app-sidebar {
+    width: 72px;
+    padding: 18px 10px;
+  }
+
+  .app-sidebar-brand {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .app-sidebar-brand-name,
+  .app-sidebar-brand-tag,
+  .nav-link-label,
+  .app-sidebar-user-email {
+    display: none;
+  }
+
+  .nav-link {
+    justify-content: center;
+    padding: 10px;
+  }
+
+  .app-sidebar-user {
+    justify-content: center;
+    padding: 6px 0 12px;
+  }
+
+  .app-main {
+    padding: 20px 16px;
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+}
