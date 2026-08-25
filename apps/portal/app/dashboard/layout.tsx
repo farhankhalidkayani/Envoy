@@ -3,15 +3,15 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ApiError } from "@envoy/sdk";
-import { api } from "../../lib/api.js";
-import { useAuth } from "../../lib/auth.js";
+import { api } from "../../lib/api";
+import { useAuth } from "../../lib/auth";
+import { BotIcon, ChatIcon, SyncIcon, CardIcon, LogoMark } from "../../components/icons";
 
 const NAV = [
-  { href: "/dashboard", label: "Agents" },
-  { href: "/dashboard/conversations", label: "Conversations" },
-  { href: "/dashboard/crm", label: "CRM" },
-  { href: "/dashboard/billing", label: "Billing" },
+  { href: "/dashboard", label: "Agents", icon: BotIcon },
+  { href: "/dashboard/conversations", label: "Conversations", icon: ChatIcon },
+  { href: "/dashboard/crm", label: "CRM", icon: SyncIcon },
+  { href: "/dashboard/billing", label: "Billing", icon: CardIcon },
 ];
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
@@ -34,47 +34,43 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   if (loading || !user) return null;
 
+  const initial = user.email.charAt(0).toUpperCase();
+
   return (
-    <div style={{ display: "flex", minHeight: "100vh" }}>
-      <aside
-        style={{
-          width: 200,
-          borderRight: "1px solid var(--line)",
-          background: "var(--panel)",
-          padding: "20px 16px",
-          flexShrink: 0,
-        }}
-      >
-        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 24 }}>Envoy</div>
-        <nav style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          {NAV.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              style={{
-                padding: "8px 10px",
-                borderRadius: 6,
-                fontSize: 13.5,
-                fontWeight: 500,
-                textDecoration: "none",
-                color: pathname === item.href ? "#fff" : "var(--ink-soft)",
-                background: pathname === item.href ? "var(--accent)" : "transparent",
-              }}
-            >
-              {item.label}
-            </Link>
-          ))}
+    <div className="app-shell">
+      <aside className="app-sidebar">
+        <div className="app-sidebar-brand">
+          <span className="app-sidebar-brand-mark">
+            <LogoMark />
+          </span>
+          <span className="app-sidebar-brand-name">Envoy</span>
+        </div>
+
+        <nav className="nav-section">
+          {NAV.map((item) => {
+            const Icon = item.icon;
+            const active = pathname === item.href;
+            return (
+              <Link key={item.href} href={item.href} className={`nav-link${active ? " active" : ""}`}>
+                <Icon size={17} />
+                {item.label}
+              </Link>
+            );
+          })}
         </nav>
-        <button
-          onClick={logout}
-          className="btn"
-          style={{ marginTop: 24, width: "100%", fontSize: 13 }}
-        >
-          Sign out
-        </button>
+
+        <div className="app-sidebar-footer">
+          <div className="app-sidebar-user">
+            <span className="app-sidebar-avatar">{initial}</span>
+            <span className="app-sidebar-user-email">{user.email}</span>
+          </div>
+          <button onClick={logout} className="btn">
+            Sign out
+          </button>
+        </div>
       </aside>
 
-      <main style={{ flex: 1, padding: "28px 36px", maxWidth: 960 }}>
+      <main className="app-main">
         {locked && (
           <div className="locked-banner">
             <strong>This account is locked pending payment.</strong> Your widget is showing a

@@ -5,6 +5,7 @@ import { ApiError } from "@envoy/sdk";
 import type { CrmConnection } from "@envoy/sdk";
 import { api } from "../../../lib/api";
 import { errorMessage } from "../../../lib/errors";
+import { ConfirmDialog } from "../../../components/ConfirmDialog";
 
 interface MappingRow {
   envoyKey: string;
@@ -18,6 +19,8 @@ export default function CrmPage() {
   const [connecting, setConnecting] = useState(false);
   const [rows, setRows] = useState<MappingRow[]>([]);
   const [saving, setSaving] = useState(false);
+  const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
 
   function load() {
     api.crm
@@ -53,12 +56,16 @@ export default function CrmPage() {
   }
 
   async function disconnect() {
-    if (!confirm("Disconnect your CRM? Field mapping will be lost.")) return;
+    setConfirmingDisconnect(false);
+    setDisconnecting(true);
+    setError(null);
     try {
       await api.crm.disconnect();
       load();
     } catch (err) {
       setError(errorMessage(err));
+    } finally {
+      setDisconnecting(false);
     }
   }
 
@@ -92,7 +99,7 @@ export default function CrmPage() {
   if (notEnabled) {
     return (
       <div>
-        <h1 style={{ fontSize: 20, marginBottom: 16 }}>CRM</h1>
+        <h1 className="page-title">CRM</h1>
         <div className="card" style={{ color: "var(--ink-faint)" }}>
           CRM sync isn't enabled for your account yet. Ask your workspace admin to turn it on.
         </div>
@@ -102,7 +109,7 @@ export default function CrmPage() {
 
   return (
     <div style={{ maxWidth: 560 }}>
-      <h1 style={{ fontSize: 20, marginBottom: 16 }}>CRM</h1>
+      <h1 className="page-title">CRM</h1>
       {error && <div className="error-banner">{error}</div>}
 
       {connection === undefined ? null : !connection ? (
@@ -125,7 +132,11 @@ export default function CrmPage() {
                   {connection.provider}
                 </span>
               </span>
-              <button className="btn btn-danger" onClick={disconnect} style={{ fontSize: 12.5 }}>
+              <button
+                className="btn btn-danger"
+                onClick={() => setConfirmingDisconnect(true)}
+                style={{ fontSize: 12.5 }}
+              >
                 Disconnect
               </button>
             </div>
@@ -169,6 +180,17 @@ export default function CrmPage() {
           </div>
         </>
       )}
+
+      <ConfirmDialog
+        open={confirmingDisconnect}
+        title="Disconnect your CRM?"
+        description="Your field mapping will be lost, and completed conversations will stop pushing to it. You can reconnect later, but you'll need to set the mapping up again."
+        confirmLabel="Disconnect"
+        danger
+        busy={disconnecting}
+        onConfirm={disconnect}
+        onCancel={() => setConfirmingDisconnect(false)}
+      />
     </div>
   );
 }

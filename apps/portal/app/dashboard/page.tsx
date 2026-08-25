@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import type { Agent } from "@envoy/sdk";
-import { api } from "../../lib/api.js";
-import { errorMessage } from "./layout.js";
+import type { Agent, Conversation } from "@envoy/sdk";
+import { api } from "../../lib/api";
+import { errorMessage } from "../../lib/errors";
+import { BotIcon, PulseIcon, ChatIcon, CheckCircleIcon } from "../../components/icons";
 
 const STATUS_PILL: Record<Agent["status"], string> = {
   draft: "pill-gray",
@@ -14,22 +15,70 @@ const STATUS_PILL: Record<Agent["status"], string> = {
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[] | null>(null);
+  const [conversations, setConversations] = useState<Conversation[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     api.agents.list().then(setAgents).catch((err) => setError(errorMessage(err)));
+    api.conversations.list().then(setConversations).catch(() => {});
   }, []);
+
+  const liveAgents = agents?.filter((a) => a.status === "live").length ?? 0;
+  const totalConversations = conversations?.length ?? 0;
+  const completed = conversations?.filter((c) => c.status === "completed").length ?? 0;
+  const completionRate = totalConversations > 0 ? Math.round((completed / totalConversations) * 100) : null;
 
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <h1 style={{ fontSize: 20 }}>Agents</h1>
+        <h1 className="page-title page-title--flush">Agents</h1>
         <Link href="/dashboard/agents/new" className="btn btn-primary">
           + New agent
         </Link>
       </div>
 
       {error && <div className="error-banner">{error}</div>}
+
+      {agents && (
+        <div className="stat-grid">
+          <div className="stat-card">
+            <div className="stat-card-top">
+              <span className="stat-card-icon">
+                <BotIcon size={16} />
+              </span>
+            </div>
+            <div className="stat-card-value">{agents.length}</div>
+            <div className="stat-card-label">Total agents</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-top">
+              <span className="stat-card-icon">
+                <PulseIcon size={16} />
+              </span>
+            </div>
+            <div className="stat-card-value">{liveAgents}</div>
+            <div className="stat-card-label">Live now</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-top">
+              <span className="stat-card-icon">
+                <ChatIcon size={16} />
+              </span>
+            </div>
+            <div className="stat-card-value">{totalConversations}</div>
+            <div className="stat-card-label">Conversations</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-top">
+              <span className="stat-card-icon">
+                <CheckCircleIcon size={16} />
+              </span>
+            </div>
+            <div className="stat-card-value">{completionRate !== null ? `${completionRate}%` : "—"}</div>
+            <div className="stat-card-label">Completion rate</div>
+          </div>
+        </div>
+      )}
 
       {agents && agents.length === 0 && (
         <div className="card" style={{ textAlign: "center", color: "var(--ink-faint)" }}>

@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import type { Conversation } from "@envoy/sdk";
-import { api } from "../../../../lib/api.js";
-import { errorMessage } from "../../layout.js";
+import { api } from "../../../../lib/api";
+import { errorMessage } from "../../../../lib/errors";
 
 export default function ConversationDetailPage() {
   const params = useParams<{ id: string }>();
@@ -30,12 +31,22 @@ export default function ConversationDetailPage() {
     }
   }
 
-  if (error) return <div className="error-banner">{error}</div>;
-  if (!conversation) return null;
+  if (error && !conversation) {
+    return (
+      <div>
+        <div className="error-banner">{error}</div>
+        <Link href="/dashboard/conversations" className="btn">
+          ← Back to conversations
+        </Link>
+      </div>
+    );
+  }
+  if (!conversation) return <div className="card">Loading conversation…</div>;
 
   return (
     <div style={{ maxWidth: 680 }}>
-      <h1 style={{ fontSize: 20, marginBottom: 4 }}>{conversation.agent?.name ?? "Conversation"}</h1>
+      {error && <div className="error-banner">{error}</div>}
+      <h1 className="page-title page-title--tight">{conversation.agent?.name ?? "Conversation"}</h1>
       <p style={{ color: "var(--ink-faint)", fontSize: 12.5, marginBottom: 20 }}>
         {new Date(conversation.createdAt).toLocaleString()} · {conversation.status}
         {conversation.outcomeType ? ` · ${conversation.outcomeType}` : ""}

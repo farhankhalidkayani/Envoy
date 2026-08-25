@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import type { Agent } from "@envoy/sdk";
-import { api } from "../../../../lib/api.js";
-import { errorMessage } from "../../layout.js";
+import { api } from "../../../../lib/api";
+import { errorMessage } from "../../../../lib/errors";
 
 const WIDGET_ORIGIN = process.env.NEXT_PUBLIC_WIDGET_ORIGIN ?? "http://localhost:5173";
 
@@ -33,15 +34,25 @@ export default function AgentDetailPage() {
     }
   }
 
-  if (error) return <div className="error-banner">{error}</div>;
-  if (!agent) return null;
+  if (error && !agent) {
+    return (
+      <div>
+        <div className="error-banner">{error}</div>
+        <Link href="/dashboard" className="btn">
+          ← Back to agents
+        </Link>
+      </div>
+    );
+  }
+  if (!agent) return <div className="card">Loading agent…</div>;
 
   const snippet = `<script src="${WIDGET_ORIGIN}/loader.js" data-agent="${agent.publicToken}"><\/script>`;
 
   return (
     <div style={{ maxWidth: 640 }}>
+      {error && <div className="error-banner">{error}</div>}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <h1 style={{ fontSize: 20 }}>{agent.name}</h1>
+        <h1 className="page-title page-title--flush">{agent.name}</h1>
         <button
           onClick={toggleLive}
           disabled={publishing}
@@ -78,8 +89,11 @@ export default function AgentDetailPage() {
         ) : (
           <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
             {agent.requiredFields.map((f) => (
-              <li key={f.key}>
+              <li key={f.key} style={{ marginBottom: 4 }}>
                 {f.label} <span style={{ color: "var(--ink-faint)" }}>({f.type})</span>
+                {f.prompt && (
+                  <div style={{ color: "var(--ink-faint)", fontSize: 12 }}>{f.prompt}</div>
+                )}
               </li>
             ))}
           </ul>

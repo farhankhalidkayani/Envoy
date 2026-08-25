@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ApiError } from "@envoy/sdk";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
+import { errorMessage } from "../../lib/errors";
 
 export default function LoginPage() {
   const { setSession } = useAuth();
@@ -23,7 +23,7 @@ export default function LoginPage() {
       setSession(result);
       router.push("/tenants");
     } catch (err) {
-      setError(err instanceof ApiError || err instanceof Error ? err.message : "Something went wrong.");
+      setError(errorMessage(err));
     } finally {
       setSubmitting(false);
     }
@@ -31,7 +31,7 @@ export default function LoginPage() {
 
   return (
     <div style={{ maxWidth: 380, margin: "80px auto", padding: "0 20px" }}>
-      <h1 style={{ fontSize: 22, marginBottom: 4 }}>Envoy Operator Console</h1>
+      <h1 className="page-title page-title--tight">Envoy Operator Console</h1>
       <p style={{ color: "var(--ink-faint)", marginBottom: 24, fontSize: 13 }}>
         platform_admin access only
       </p>
@@ -44,6 +44,7 @@ export default function LoginPage() {
           <input
             id="email"
             type="email"
+            autoComplete="email"
             required
             value={email}
             onInput={(e) => setEmail((e.target as HTMLInputElement).value)}
@@ -54,6 +55,7 @@ export default function LoginPage() {
           <input
             id="password"
             type="password"
+            autoComplete="current-password"
             required
             value={password}
             onInput={(e) => setPassword((e.target as HTMLInputElement).value)}

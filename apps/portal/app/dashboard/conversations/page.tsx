@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Conversation } from "@envoy/sdk";
-import { api } from "../../../lib/api.js";
-import { errorMessage } from "../layout.js";
+import { api } from "../../../lib/api";
+import { errorMessage } from "../../../lib/errors";
 
 const STATUS_PILL: Record<Conversation["status"], string> = {
   in_progress: "pill-warn",
@@ -22,7 +22,7 @@ export default function ConversationsPage() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 20, marginBottom: 20 }}>Conversations</h1>
+      <h1 className="page-title">Conversations</h1>
       {error && <div className="error-banner">{error}</div>}
 
       {conversations && conversations.length === 0 && (

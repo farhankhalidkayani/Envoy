@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { Subscription } from "@envoy/sdk";
-import { api } from "../../../lib/api.js";
-import { errorMessage } from "../layout.js";
+import { api } from "../../../lib/api";
+import { errorMessage } from "../../../lib/errors";
 
 const STATUS_PILL: Record<Subscription["status"], string> = {
   active: "pill-ok",
@@ -26,7 +26,7 @@ export default function BillingPage() {
 
   return (
     <div style={{ maxWidth: 480 }}>
-      <h1 style={{ fontSize: 20, marginBottom: 20 }}>Billing</h1>
+      <h1 className="page-title">Billing</h1>
       {error && <div className="error-banner">{error}</div>}
 
       {subscription && (

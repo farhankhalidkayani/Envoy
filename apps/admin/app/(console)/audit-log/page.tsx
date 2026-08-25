@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { AuditLogEntry } from "@envoy/sdk";
 import { api } from "../../../lib/api";
-import { errorMessage } from "../layout";
+import { errorMessage } from "../../../lib/errors";
 
 export default function AuditLogPage() {
   const [entries, setEntries] = useState<AuditLogEntry[] | null>(null);
@@ -15,7 +15,7 @@ export default function AuditLogPage() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 20, marginBottom: 20 }}>Audit log</h1>
+      <h1 className="page-title">Audit log</h1>
       {error && <div className="error-banner">{error}</div>}
 
       {entries && entries.length === 0 && (

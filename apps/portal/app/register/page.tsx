@@ -3,9 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ApiError } from "@envoy/sdk";
-import { api } from "../../lib/api.js";
-import { useAuth } from "../../lib/auth.js";
+import { api } from "../../lib/api";
+import { useAuth } from "../../lib/auth";
+import { errorMessage } from "../../lib/errors";
 
 export default function RegisterPage() {
   const { setSession } = useAuth();
@@ -25,7 +25,7 @@ export default function RegisterPage() {
       setSession(result);
       router.push("/dashboard");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Something went wrong.");
+      setError(errorMessage(err));
     } finally {
       setSubmitting(false);
     }
@@ -33,7 +33,7 @@ export default function RegisterPage() {
 
   return (
     <div style={{ maxWidth: 380, margin: "80px auto", padding: "0 20px" }}>
-      <h1 style={{ fontSize: 22, marginBottom: 4 }}>Create your workspace</h1>
+      <h1 className="page-title page-title--tight">Create your workspace</h1>
       <p style={{ color: "var(--ink-faint)", marginBottom: 24, fontSize: 13 }}>
         Free to start — no card required.
       </p>
@@ -45,6 +45,7 @@ export default function RegisterPage() {
           <label htmlFor="tenantName">Business name</label>
           <input
             id="tenantName"
+            autoComplete="organization"
             required
             value={tenantName}
             onInput={(e) => setTenantName((e.target as HTMLInputElement).value)}
@@ -55,6 +56,7 @@ export default function RegisterPage() {
           <input
             id="email"
             type="email"
+            autoComplete="email"
             required
             value={email}
             onInput={(e) => setEmail((e.target as HTMLInputElement).value)}
@@ -65,11 +67,13 @@ export default function RegisterPage() {
           <input
             id="password"
             type="password"
+            autoComplete="new-password"
             required
             minLength={8}
             value={password}
             onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
           />
+          <p style={{ fontSize: 11.5, color: "var(--ink-faint)", marginTop: 4 }}>At least 8 characters.</p>
         </div>
         <button type="submit" className="btn btn-primary" disabled={submitting} style={{ width: "100%" }}>
           {submitting ? "Creating…" : "Create workspace"}

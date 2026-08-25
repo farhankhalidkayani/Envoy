@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { AuthResult } from "@envoy/sdk";
-import { TOKEN_STORAGE_KEY } from "./api.js";
+import { TOKEN_STORAGE_KEY, USER_STORAGE_KEY } from "./api";
 
 type SessionUser = AuthResult["user"];
 
@@ -15,7 +15,6 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-const USER_STORAGE_KEY = "envoy_admin_user";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
