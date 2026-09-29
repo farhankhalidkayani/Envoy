@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { safeFetch } from "../../core/common/safe-fetch.js";
 import { renderTemplate } from "../template.js";
 import type { IntegrationPushResult, WebhookConfig } from "../types.js";
 
@@ -9,7 +10,7 @@ export class WebhookSender {
       ? renderTemplate(config.payloadTemplate, capturedData)
       : JSON.stringify(capturedData);
 
-    const response = await fetch(config.url, {
+    const response = await safeFetch(config.url, {
       method: config.method ?? "POST",
       headers: { "Content-Type": "application/json", ...(config.headers ?? {}) },
       body,

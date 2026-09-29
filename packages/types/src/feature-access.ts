@@ -12,6 +12,7 @@ export const FEATURE_KEYS = [
   "export",
   "voice",
   "integrations",
+  "forms",
 ] as const;
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
 
@@ -33,4 +34,5 @@ export const DEFAULT_FEATURE_ACCESS: FeatureAccess = {
   export: true,
   voice: false,
   integrations: false,
+  forms: false,
 };
