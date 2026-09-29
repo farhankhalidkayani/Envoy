@@ -3,8 +3,10 @@ import type {
   ConversationChannel,
   ConversationStatus,
   FeatureAccess,
+  FormSchema,
   HardRulesSpec,
   OutcomeType,
+  PublicFormSchema,
   RequiredFieldsSpec,
   SubscriptionStatus,
   UserRole,
@@ -136,4 +138,31 @@ export interface AuditLogEntry {
   meta: Record<string, unknown>;
   createdAt: string;
   adminUser: { email: string };
+}
+
+export interface Form {
+  id: string;
+  tenantId: string;
+  name: string;
+  status: "draft" | "live";
+  schema: FormSchema;
+  publicToken: string;
+  createdAt: string;
+  updatedAt: string;
+  _count?: { submissions: number };
+}
+
+export interface FormSubmission {
+  id: string;
+  formId: string;
+  data: Record<string, unknown>;
+  crmPushedAt: string | null;
+  crmPushError: string | null;
+  integrationStatus: Partial<Record<IntegrationType, { pushedAt?: string; error?: string }>>;
+  createdAt: string;
+}
+
+export interface PublicForm {
+  name: string;
+  schema: PublicFormSchema;
 }

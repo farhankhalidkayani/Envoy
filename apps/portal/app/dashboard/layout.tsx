@@ -5,11 +5,12 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
-import { BotIcon, ChatIcon, SyncIcon, CardIcon, PlugIcon, LogoMark } from "../../components/icons";
+import { BotIcon, ChatIcon, SyncIcon, CardIcon, PlugIcon, FormIcon, LogoMark } from "../../components/icons";
 
 const NAV = [
   { href: "/dashboard", label: "Agents", icon: BotIcon },
   { href: "/dashboard/conversations", label: "Conversations", icon: ChatIcon },
+  { href: "/dashboard/forms", label: "Lead forms", icon: FormIcon },
   { href: "/dashboard/crm", label: "CRM", icon: SyncIcon },
   { href: "/dashboard/integrations", label: "Integrations", icon: PlugIcon },
   { href: "/dashboard/billing", label: "Billing", icon: CardIcon },
@@ -50,7 +51,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <nav className="nav-section">
           {NAV.map((item) => {
             const Icon = item.icon;
-            const active = pathname === item.href;
+            const active = item.href === "/dashboard" ? pathname === item.href : pathname.startsWith(item.href);
             return (
               <Link
                 key={item.href}

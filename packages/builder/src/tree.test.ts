@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { insertBlock, moveBlock, moveContainer, removeBlock, updateBlock, type BuilderAdapter } from "./tree.js";
+import { insertBlock, moveBlock, moveContainer, removeBlock, updateBlock, type BuilderAdapter } from "./tree";
 
 type B = { id: string };
 type C = { id: string; items: B[] };

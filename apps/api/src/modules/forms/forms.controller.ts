@@ -1,5 +1,6 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { z } from "zod";
+import { ApiOptionsSource } from "@envoy/types";
 import { RequireFeature } from "../core/auth/decorators/require-feature.decorator.js";
 import { CurrentUser } from "../core/auth/decorators/current-user.decorator.js";
 import { FeatureGuard } from "../core/auth/guards/feature.guard.js";
@@ -18,6 +19,8 @@ const UpdateFormDto = z.object({
   schema: z.unknown().optional(),
 });
 
+const TestOptionsDto = z.object({ source: ApiOptionsSource, answers: z.record(z.string(), z.unknown()).default({}) });
+
 const GUARDS = [JwtAuthGuard, TenantScopeGuard, TenantLockGuard, FeatureGuard] as const;
 
 @Controller("forms")
@@ -34,6 +37,13 @@ export class FormsController {
   @Post()
   create(@CurrentUser() user: JwtPayload, @Body(new ZodValidationPipe(CreateFormDto)) body: z.infer<typeof CreateFormDto>) {
     return this.forms.create(user.tenantId!, body.name);
+  }
+
+  // Declared before ":id" routes so "options" is never read as a form id.
+  @Post("options/test")
+  @HttpCode(200)
+  testOptions(@Body(new ZodValidationPipe(TestOptionsDto)) body: z.infer<typeof TestOptionsDto>) {
+    return this.forms.fetchFromSource(body.source, body.answers);
   }
 
   @Get(":id")

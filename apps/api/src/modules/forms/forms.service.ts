@@ -6,6 +6,7 @@ import {
   renderOptionsUrl,
   toPublicFormSchema,
   validateSubmission,
+  type ApiOptionsSource,
   type FormOption,
 } from "@envoy/types";
 import { PrismaService } from "../core/prisma/prisma.service.js";
@@ -130,10 +131,13 @@ export class FormsService {
    */
   async fetchOptions(publicToken: string, fieldKey: string, answers: Record<string, unknown>): Promise<FormOption[]> {
     const { schema } = await this.getLive(publicToken);
-    const field = schema.steps.flatMap((s) => s.fields).find((f) => f.key === fieldKey);
-    const source = field?.optionsSource;
+    const source = schema.steps.flatMap((s) => s.fields).find((f) => f.key === fieldKey)?.optionsSource;
     if (!source) throw new NotFoundException("No API options for this field");
+    return this.fetchFromSource(source, answers);
+  }
 
+  /** Builder "Test" button / preview: same fetch, for a source config that may not be saved yet. */
+  async fetchFromSource(source: ApiOptionsSource, answers: Record<string, unknown>): Promise<FormOption[]> {
     let response: Response;
     try {
       response = await safeFetch(renderOptionsUrl(source.url, answers), {

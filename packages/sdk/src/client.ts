@@ -1,4 +1,4 @@
-import type { FeatureAccess, PriceConfig } from "@envoy/types";
+import type { ApiOptionsSource, FeatureAccess, FormOption, FormSchema, PriceConfig } from "@envoy/types";
 import type {
   AdminTenant,
   AdminTenantDetail,
@@ -9,7 +9,10 @@ import type {
   Conversation,
   CrmConnection,
   EmailIntegrationConfig,
+  Form,
+  FormSubmission,
   Integration,
+  PublicForm,
   Subscription,
   WebhookIntegrationConfig,
 } from "./types";
@@ -125,6 +128,10 @@ export function createApiClient(config: ApiClientConfig) {
         request<{ success: boolean; externalId?: string; error?: string }>(`/crm/push/${conversationId}`, {
           method: "POST",
         }),
+      pushSubmission: (submissionId: string) =>
+        request<{ success: boolean; externalId?: string; error?: string }>(`/crm/push/submission/${submissionId}`, {
+          method: "POST",
+        }),
     },
 
     integrations: {
@@ -147,6 +154,31 @@ export function createApiClient(config: ApiClientConfig) {
         request<{ success: boolean; error?: string }>(`/integrations/${type}/push/${conversationId}`, {
           method: "POST",
         }),
+      pushSubmission: (type: "webhook" | "email" | "calendar", submissionId: string) =>
+        request<{ success: boolean; error?: string }>(`/integrations/${type}/push/submission/${submissionId}`, {
+          method: "POST",
+        }),
+    },
+
+    forms: {
+      list: () => request<Form[]>("/forms"),
+      get: (id: string) => request<Form>(`/forms/${id}`),
+      create: (name: string) => request<Form>("/forms", { method: "POST", body: { name } }),
+      update: (id: string, input: { name?: string; status?: Form["status"]; schema?: FormSchema }) =>
+        request<Form>(`/forms/${id}`, { method: "PATCH", body: input }),
+      remove: (id: string) => request<void>(`/forms/${id}`, { method: "DELETE" }),
+      submissions: (id: string) => request<FormSubmission[]>(`/forms/${id}/submissions`),
+      testOptions: (source: ApiOptionsSource, answers: Record<string, unknown> = {}) =>
+        request<FormOption[]>("/forms/options/test", { method: "POST", body: { source, answers } }),
+    },
+
+    /** Unauthenticated — used by the hosted form page. */
+    publicForms: {
+      get: (token: string) => request<PublicForm>(`/public/forms/${token}`),
+      submit: (token: string, data: Record<string, unknown>) =>
+        request<{ successMessage: string }>(`/public/forms/${token}/submit`, { method: "POST", body: data }),
+      options: (token: string, fieldKey: string, answers: Record<string, unknown>) =>
+        request<FormOption[]>(`/public/forms/${token}/options/${fieldKey}`, { method: "POST", body: answers }),
     },
 
     admin: {

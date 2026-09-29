@@ -82,6 +82,17 @@ export function PlugIcon({ size = 18 }: IconProps) {
   );
 }
 
+export function FormIcon({ size = 18 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...base}>
+      <rect x="4" y="3" width="16" height="18" rx="2.5" />
+      <path d="M8 8h8" />
+      <rect x="8" y="11.5" width="8" height="3" rx="1" />
+      <path d="M8 18h4" />
+    </svg>
+  );
+}
+
 export function LogoMark({ size = 15 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">

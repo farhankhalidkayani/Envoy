@@ -634,3 +634,527 @@ button:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+
+/* ───────────────────────── Lead form builder ───────────────────────── */
+
+/* The three-pane builder needs more room than the default content column. */
+.app-main:has(.fb-page) {
+  max-width: none;
+}
+
+.fb-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.fb-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.fb-back {
+  text-decoration: none;
+  font-size: 18px;
+  color: var(--ink-faint);
+}
+
+.fb-name {
+  font-size: 20px;
+  font-weight: 750;
+  letter-spacing: -0.015em;
+  border-color: transparent;
+  background: transparent;
+  padding: 4px 8px;
+  max-width: 420px;
+}
+
+.fb-name:hover {
+  border-color: var(--line);
+}
+
+.fb-dirty {
+  font-size: 12px;
+  color: var(--warn);
+  white-space: nowrap;
+}
+
+.fb-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.fb-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 16px;
+}
+
+.fb-tab {
+  border: none;
+  background: none;
+  padding: 8px 14px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-faint);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.fb-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.fb-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.fb-issues {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.fb-field-label {
+  font-weight: 600;
+  font-size: 13.5px;
+}
+
+.fb-field-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.fb-field-meta code {
+  background: var(--paper);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.fb-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.fb-field-meta .fb-badge {
+  margin-left: 0;
+}
+
+.fb-preview {
+  max-width: 640px;
+}
+
+.fb-preview-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 12.5px;
+  color: var(--ink-faint);
+  margin-bottom: 10px;
+}
+
+.fb-preview-frame {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 24px;
+}
+
+.fb-table-wrap {
+  padding: 0;
+  overflow-x: auto;
+}
+
+.fb-retry {
+  border: none;
+  cursor: pointer;
+  margin-right: 4px;
+}
+
+.fb-muted {
+  color: var(--ink-faint);
+  font-size: 12.5px;
+}
+
+.fb-copy-row {
+  display: flex;
+  gap: 8px;
+}
+
+.fb-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+/* Inspector */
+.fi-section {
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.fi-section:first-of-type {
+  border-top: none;
+  padding-top: 4px;
+}
+
+.fi-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  margin-bottom: 8px;
+}
+
+.fi-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.fi-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.fi-hint {
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  font-weight: 400;
+}
+
+.fi-warn {
+  font-size: 12px;
+  color: var(--stop);
+  margin: 6px 0;
+}
+
+.fi .btn,
+.fi-small-btn {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.fi input,
+.fi select,
+.fi textarea {
+  padding: 7px 9px;
+  font-size: 13px;
+}
+
+.fi-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.fi-toggle input {
+  width: auto;
+}
+
+.fi-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.fi-segment {
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  margin-bottom: 10px;
+}
+
+.fi-segment button {
+  flex: 1;
+  border: none;
+  background: none;
+  padding: 6px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+.fi-segment button.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.fi-option,
+.fi-condition {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.fi-condition {
+  flex-wrap: wrap;
+  padding: 8px;
+  background: var(--paper);
+  border-radius: var(--radius-sm);
+}
+
+.fi-condition select,
+.fi-condition input {
+  flex: 1 1 110px;
+  width: auto;
+}
+
+.fi-match {
+  font-size: 12.5px;
+  margin-bottom: 8px;
+}
+
+.fi-match select {
+  width: auto;
+  display: inline-block;
+  padding: 3px 6px;
+}
+
+.fi-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.fi-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: -4px 0 10px;
+}
+
+.fi-chip {
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.fi-test {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+
+/* ───────────────────────── Form renderer (preview + public) ───────────────────────── */
+
+.ef-root {
+  --ef-accent: var(--accent);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ef-progress {
+  height: 4px;
+  background: var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.ef-progress-bar {
+  height: 100%;
+  background: var(--ef-accent);
+  transition: width 0.25s ease;
+}
+
+.ef-step-title {
+  font-size: 18px;
+  margin: 4px 0 0;
+  outline: none;
+}
+
+.ef-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ef-fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.ef-label {
+  font-weight: 600;
+  font-size: 13.5px;
+  padding: 0;
+}
+
+.ef-req {
+  color: var(--stop);
+}
+
+.ef-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.ef-check input {
+  width: auto;
+  margin-top: 4px;
+  accent-color: var(--ef-accent);
+}
+
+.ef-help {
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+
+.ef-error {
+  font-size: 12.5px;
+  color: var(--stop);
+}
+
+.ef-field input[aria-invalid="true"],
+.ef-field select[aria-invalid="true"],
+.ef-field textarea[aria-invalid="true"] {
+  border-color: var(--stop);
+}
+
+.ef-muted {
+  color: var(--ink-faint);
+  font-size: 13px;
+}
+
+.ef-placeholder {
+  padding: 9px 11px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.ef-form-error {
+  background: var(--stop-soft);
+  color: var(--stop);
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.ef-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ef-btn {
+  border-radius: var(--radius-sm);
+  padding: 10px 18px;
+  font-weight: 600;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.ef-btn-primary {
+  background: var(--ef-accent);
+  border-color: var(--ef-accent);
+  color: #fff;
+}
+
+.ef-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.ef-btn:focus-visible {
+  outline: 2px solid var(--ef-accent);
+  outline-offset: 2px;
+}
+
+.ef-done {
+  text-align: center;
+  padding: 24px 8px;
+}
+
+.ef-done-icon {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 10px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ok-soft);
+  color: var(--ok);
+  font-size: 22px;
+}
+
+/* Public hosted page */
+.pf-page {
+  min-height: 100vh;
+  padding: 48px 16px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.pf-card {
+  width: 100%;
+  max-width: 560px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 28px;
+}
+
+.pf-title {
+  font-size: 22px;
+  margin: 0 0 16px;
+}
+
+.pf-embed {
+  padding: 4px;
+  background: transparent;
+}
+
+body:has(.pf-embed) {
+  background: transparent;
+}
+
+/* Size the inline name editor to its text so the status pill sits beside it. */
+.fb-name {
+  width: auto;
+  field-sizing: content;
+  min-width: 8ch;
+}
