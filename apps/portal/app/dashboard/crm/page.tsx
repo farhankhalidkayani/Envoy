@@ -7,6 +7,7 @@ import { api } from "../../../lib/api";
 import { errorMessage } from "../../../lib/errors";
 import { ConfirmDialog } from "../../../components/ConfirmDialog";
 import { useToast } from "../../../components/Toast";
+import { useOAuthReturn } from "../../../lib/oauth-return";
 
 interface MappingRow {
   envoyKey: string;
@@ -44,11 +45,23 @@ export default function CrmPage() {
 
   useEffect(load, []);
 
+  useOAuthReturn(
+    () => {
+      showToast("HubSpot connected.");
+      load();
+    },
+    (message) => setError(message),
+  );
+
   async function connect() {
     setConnecting(true);
     setError(null);
     try {
-      await api.crm.connect();
+      const result = await api.crm.connect();
+      if (result.mode === "oauth" && result.authorizeUrl) {
+        window.location.href = result.authorizeUrl;
+        return;
+      }
       load();
       showToast("CRM connected.");
     } catch (err) {

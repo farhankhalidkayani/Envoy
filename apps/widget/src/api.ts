@@ -1,21 +1,17 @@
-import { ServerMessage, type ClientMessage } from "@envoy/types";
+import { ServerMessage, type ClientMessage, type WidgetConfig } from "@envoy/types";
 
 const API_ORIGIN = import.meta.env.VITE_API_ORIGIN ?? "http://localhost:4000";
 const WS_ORIGIN = import.meta.env.VITE_WS_ORIGIN ?? "ws://localhost:4000";
+export const PORTAL_ORIGIN = import.meta.env.VITE_PORTAL_ORIGIN ?? "http://localhost:3001";
 
 export interface PublicAgent {
   id: string;
   publicToken: string;
-  widgetConfig: {
-    primaryColor: string;
-    logoUrl?: string;
-    position: "bottom-right" | "bottom-left";
-    greeting: string;
-    launcherLabel: string;
-    themeMode: "light" | "dark" | "auto";
-  };
+  widgetConfig: WidgetConfig;
   locked: boolean;
   voiceEnabled: boolean;
+  /** publicToken of the tenant's linked lead form, only set when that form is published. */
+  leadFormToken: string | null;
 }
 
 export async function resolveAgent(publicToken: string): Promise<PublicAgent> {

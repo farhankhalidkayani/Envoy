@@ -12,6 +12,7 @@ import { api } from "../../../lib/api";
 import { errorMessage } from "../../../lib/errors";
 import { ConfirmDialog } from "../../../components/ConfirmDialog";
 import { useToast } from "../../../components/Toast";
+import { useOAuthReturn } from "../../../lib/oauth-return";
 
 const EMPTY_WEBHOOK: WebhookIntegrationConfig = { url: "", method: "POST", payloadTemplate: "" };
 const EMPTY_EMAIL: EmailIntegrationConfig = { to: "", subject: "", bodyTemplate: "" };
@@ -35,6 +36,13 @@ export default function IntegrationsPage() {
   }
 
   useEffect(load, []);
+  useOAuthReturn(
+    () => {
+      showToast("Google Calendar connected.");
+      load();
+    },
+    (message) => setError(message),
+  );
 
   function find(type: "webhook" | "email" | "calendar") {
     return integrations?.find((i) => i.type === type);
@@ -158,6 +166,11 @@ function WebhookCard({
   const [saving, setSaving] = useState(false);
   const { showToast } = useToast();
 
+  const headers = Object.entries(config.headers ?? {});
+  function setHeaders(next: Array<[string, string]>) {
+    setConfig({ ...config, headers: Object.fromEntries(next) });
+  }
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -181,11 +194,74 @@ function WebhookCard({
       onDisconnect={onDisconnect}
     >
       <form onSubmit={save} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <input
-          placeholder="https://example.com/webhook"
-          value={config.url}
-          onInput={(e) => setConfig({ ...config, url: (e.target as HTMLInputElement).value })}
-        />
+        <div style={{ display: "flex", gap: 8 }}>
+          <select
+            aria-label="HTTP method"
+            value={config.method ?? "POST"}
+            onChange={(e) => setConfig({ ...config, method: (e.target as HTMLSelectElement).value as WebhookIntegrationConfig["method"] })}
+            style={{ width: 100 }}
+          >
+            <option value="POST">POST</option>
+            <option value="PUT">PUT</option>
+            <option value="PATCH">PATCH</option>
+          </select>
+          <input
+            placeholder="https://example.com/webhook"
+            value={config.url}
+            onInput={(e) => setConfig({ ...config, url: (e.target as HTMLInputElement).value })}
+            style={{ flex: 1 }}
+          />
+        </div>
+
+        <div>
+          <label style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-soft)", display: "block", marginBottom: 4 }}>
+            Headers <span style={{ fontWeight: 400, color: "var(--ink-faint)" }}>(e.g. Authorization)</span>
+          </label>
+          {headers.map(([name, value], i) => (
+            <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+              <input
+                aria-label={`Header ${i + 1} name`}
+                placeholder="Header name"
+                value={name}
+                onInput={(e) => {
+                  const next = headers.slice();
+                  next[i] = [(e.target as HTMLInputElement).value, value];
+                  setHeaders(next);
+                }}
+                style={{ flex: 1 }}
+              />
+              <input
+                aria-label={`Header ${i + 1} value`}
+                placeholder="Value"
+                value={value}
+                onInput={(e) => {
+                  const next = headers.slice();
+                  next[i] = [name, (e.target as HTMLInputElement).value];
+                  setHeaders(next);
+                }}
+                style={{ flex: 1 }}
+              />
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setHeaders(headers.filter((_, j) => j !== i))}
+                aria-label={`Remove header ${i + 1}`}
+                style={{ fontSize: 12 }}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setHeaders([...headers, ["", ""]])}
+            style={{ fontSize: 12.5 }}
+          >
+            + Add header
+          </button>
+        </div>
+
         <textarea
           placeholder='Payload template (JSON, optional) — e.g. {"order_id": "{{orderId}}"}'
           value={config.payloadTemplate}
@@ -336,6 +412,26 @@ function CalendarCard({
             value={config.startField}
             onInput={(e) => setConfig({ ...config, startField: (e.target as HTMLInputElement).value })}
           />
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              placeholder="Calendar ID (optional, defaults to primary)"
+              value={config.calendarId ?? ""}
+              onInput={(e) => setConfig({ ...config, calendarId: (e.target as HTMLInputElement).value || undefined })}
+              style={{ flex: 1 }}
+            />
+            <input
+              type="number"
+              min={1}
+              placeholder="Duration (min)"
+              aria-label="Duration in minutes"
+              value={config.durationMinutes ?? ""}
+              onInput={(e) => {
+                const v = (e.target as HTMLInputElement).value;
+                setConfig({ ...config, durationMinutes: v ? Number(v) : undefined });
+              }}
+              style={{ width: 130 }}
+            />
+          </div>
           <textarea
             placeholder="Description template (optional)"
             value={config.descriptionTemplate}

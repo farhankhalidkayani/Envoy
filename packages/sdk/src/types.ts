@@ -23,7 +23,7 @@ import type {
 
 export interface AuthResult {
   accessToken: string;
-  user: { id: string; email: string; tenantId: string | null; role: UserRole };
+  user: { id: string; email: string; tenantId: string | null; role: UserRole; emailVerified: boolean };
 }
 
 export interface Agent {
@@ -35,6 +35,7 @@ export interface Agent {
   requiredFields: RequiredFieldsSpec;
   hardRules: HardRulesSpec;
   widgetConfig: WidgetConfig;
+  leadFormId: string | null;
   publicToken: string;
   createdAt: string;
   updatedAt: string;
@@ -111,8 +112,18 @@ export interface Subscription {
   usageRate: number;
   includedConversations: number;
   billingCycleDay: number;
+  stripeCustomerId: string | null;
   lockedAt: string | null;
   unlockedAt: string | null;
+}
+
+export interface BillingUsage {
+  cycleStart: string;
+  cycleEnd: string;
+  includedConversations: number;
+  usedConversations: number;
+  overageConversations: number;
+  overageAmountCents: number;
 }
 
 export interface AdminTenant {

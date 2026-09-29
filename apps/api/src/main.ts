@@ -9,7 +9,22 @@ async function bootstrap() {
   // (stripe.webhooks.constructEvent needs the exact bytes, not the
   // JSON-parsed body). Nest populates req.rawBody alongside normal parsing.
   const app = await NestFactory.create(AppModule, { rawBody: true });
-  app.enableCors();
+  // The portal/admin origins may send credentials (the refresh cookie). Every
+  // other origin — the widget and public forms are embedded on customer
+  // sites — still gets CORS, but never credentials, so a third-party page
+  // can't ride a signed-in user's session.
+  const trusted = new Set(
+    (process.env.CORS_ORIGINS ?? "http://localhost:3001,http://localhost:3002").split(",").map((o) => o.trim()),
+  );
+  // enableCors(fn) calls fn as (req, callback) — this is the "options
+  // delegate" form of the `cors` package (distinct from its `origin` SUB-key
+  // being a function, which instead gets called as (origin, callback); easy
+  // to mix up, and mixing it up silently drops Access-Control-Allow-Credentials
+  // for every origin with no visible error).
+  app.enableCors((req: { headers: { origin?: string } }, cb: (err: Error | null, options: object) => void) => {
+    const origin = req.headers.origin;
+    cb(null, origin && trusted.has(origin) ? { origin, credentials: true } : { origin: true, credentials: false });
+  });
 
   // Explicit wiring, not a lifecycle hook — see AgentGateway.attach() for why.
   app.get(AgentGateway).attach(app.getHttpServer() as HttpServer);

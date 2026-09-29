@@ -8,8 +8,8 @@ function handleUnauthorized() {
   localStorage.removeItem(TOKEN_STORAGE_KEY);
   localStorage.removeItem(USER_STORAGE_KEY);
   // A hard redirect, not router.push: this fires from a plain module, outside
-  // any component, whenever a real request comes back 401 (expired/revoked
-  // token) — not just on mount, so it has to work from anywhere in the app.
+  // any component, when a request is still 401 after a silent refresh attempt
+  // (session revoked or expired) — so it has to work from anywhere in the app.
   if (!window.location.pathname.startsWith("/login")) {
     window.location.href = "/login";
   }
@@ -19,4 +19,9 @@ export const api = createApiClient({
   baseUrl: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000",
   getToken: () => (typeof window === "undefined" ? null : localStorage.getItem(TOKEN_STORAGE_KEY)),
   onUnauthorized: handleUnauthorized,
+  app: "portal",
+  onSession: (result) => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, result.accessToken);
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(result.user));
+  },
 });

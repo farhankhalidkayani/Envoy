@@ -32,6 +32,8 @@ describe("billing lock/unlock + admin operator API (e2e)", () => {
   }
 
   beforeAll(async () => {
+    // No live Stripe account here: opt in to unsigned webhook payloads (test-only switch).
+    process.env.STRIPE_WEBHOOK_ALLOW_UNSIGNED = "true";
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication({ rawBody: true });
     app.get(AgentGateway).attach(app.getHttpServer() as HttpServer);
@@ -85,6 +87,7 @@ describe("billing lock/unlock + admin operator API (e2e)", () => {
   }, 20000);
 
   afterAll(async () => {
+    delete process.env.STRIPE_WEBHOOK_ALLOW_UNSIGNED;
     await prisma.tenant.deleteMany({ where: { id: tenantId } }); // cascades agent + subscription
     await app.close();
   });
@@ -249,5 +252,22 @@ describe("billing lock/unlock + admin operator API (e2e)", () => {
         ]),
       );
     });
+  });
+
+  it("rejects unsigned webhooks unless explicitly allowed, and never in production", async () => {
+    const before = await prisma.subscription.findUnique({ where: { tenantId } });
+    try {
+      delete process.env.STRIPE_WEBHOOK_ALLOW_UNSIGNED;
+      expect((await stripeWebhook("invoice.paid")).status).toBe(503);
+
+      process.env.STRIPE_WEBHOOK_ALLOW_UNSIGNED = "true";
+      process.env.NODE_ENV = "production";
+      expect((await stripeWebhook("invoice.paid")).status).toBe(503);
+    } finally {
+      process.env.STRIPE_WEBHOOK_ALLOW_UNSIGNED = "true";
+      process.env.NODE_ENV = "test";
+    }
+    const after = await prisma.subscription.findUnique({ where: { tenantId } });
+    expect(after?.status).toBe(before?.status);
   });
 });

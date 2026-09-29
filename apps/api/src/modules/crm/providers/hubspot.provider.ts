@@ -14,20 +14,26 @@ export class HubSpotCrmProvider implements CrmProvider {
   readonly name = "hubspot";
 
   async pushRecord(accessToken: string, record: Record<string, unknown>): Promise<CrmPushResult> {
-    const response = await fetch(HUBSPOT_CONTACTS_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({ properties: record }),
-    });
+    const headers = { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` };
+    const email = typeof record.email === "string" && record.email.trim() ? record.email.trim() : null;
+
+    // With an email, upsert on it: a repeat visitor or a manual re-push
+    // updates their existing contact instead of creating a duplicate (or a
+    // 409 "contact already exists"). Without one, there's nothing to dedupe on.
+    const response = email
+      ? await fetch(`${HUBSPOT_CONTACTS_URL}/batch/upsert`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ inputs: [{ idProperty: "email", id: email, properties: record }] }),
+        })
+      : await fetch(HUBSPOT_CONTACTS_URL, { method: "POST", headers, body: JSON.stringify({ properties: record }) });
 
     if (!response.ok) {
       const text = await response.text().catch(() => response.statusText);
       return { success: false, error: `HubSpot API error ${response.status}: ${text}` };
     }
-    const data = (await response.json()) as { id: string };
-    return { success: true, externalId: data.id };
+    const data = (await response.json()) as { id?: string; results?: Array<{ id: string }> };
+    const externalId = email ? data.results?.[0]?.id : data.id;
+    return externalId ? { success: true, externalId } : { success: false, error: "HubSpot returned no contact id" };
   }
 }

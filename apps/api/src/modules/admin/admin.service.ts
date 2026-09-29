@@ -51,6 +51,14 @@ export class AdminService {
     await this.audit(adminUserId, tenantId, "tenant.resumed");
   }
 
+  /** Manual trigger until a scheduler exists — see BillingService.chargeOverage. */
+  async billOverage(adminUserId: string, tenantId: string) {
+    await this.assertTenantExists(tenantId);
+    const result = await this.billing.chargeOverage(tenantId);
+    await this.audit(adminUserId, tenantId, "tenant.overage_billed", result);
+    return result;
+  }
+
   /** Soft-cancel, never a hard delete — see "never delete on lock" in the build plan. */
   async revoke(adminUserId: string, tenantId: string) {
     await this.assertTenantExists(tenantId);

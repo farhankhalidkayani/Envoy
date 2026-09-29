@@ -17,7 +17,7 @@ export class PublicAgentsController {
   async findByPublicToken(@Param("publicToken") publicToken: string) {
     const agent = await this.prisma.client.agent.findUnique({
       where: { publicToken },
-      include: { tenant: true },
+      include: { tenant: true, leadForm: true },
     });
     if (!agent || agent.status !== "live") {
       throw new NotFoundException("Agent not found");
@@ -29,6 +29,9 @@ export class PublicAgentsController {
       widgetConfig: WidgetConfig.parse(agent.widgetConfig ?? {}),
       locked: agent.tenant.subscriptionStatus === "locked",
       voiceEnabled: Boolean(priceConfig?.addOns?.voice),
+      // Only surfaced when the linked form is actually published — a draft
+      // form linked but not yet published must not leak its token publicly.
+      leadFormToken: agent.leadForm?.status === "live" ? agent.leadForm.publicToken : null,
     };
   }
 }

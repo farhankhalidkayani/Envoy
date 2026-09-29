@@ -18,7 +18,9 @@ const CreateAgentDto = z.object({
   widgetConfig: WidgetConfig.partial().optional(),
 });
 
-const UpdateAgentDto = CreateAgentDto.partial().extend({
+const UpdateOnlyDto = z.object({ leadFormId: z.string().nullable().optional() });
+
+const UpdateAgentDto = CreateAgentDto.partial().merge(UpdateOnlyDto).extend({
   status: AgentStatus.optional(),
 });
 

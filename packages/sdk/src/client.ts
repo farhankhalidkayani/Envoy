@@ -5,6 +5,7 @@ import type {
   Agent,
   AuditLogEntry,
   AuthResult,
+  BillingUsage,
   CalendarIntegrationConfig,
   Conversation,
   CrmConnection,
@@ -47,6 +48,13 @@ export interface ApiClientConfig {
    * caller is expected to clear its stored session and redirect to login.
    */
   onUnauthorized?: () => void;
+  /** Which app this is — portal and admin keep separate refresh cookies. */
+  app?: "portal" | "admin";
+  /**
+   * Called with the new session after a silent refresh, BEFORE the failed
+   * request is retried — store the access token here so getToken() returns it.
+   */
+  onSession?: (result: AuthResult) => void;
 }
 
 /**
@@ -56,9 +64,31 @@ export interface ApiClientConfig {
  * is the point of having one client instead of two ad-hoc fetch layers.
  */
 export function createApiClient(config: ApiClientConfig) {
+  let refreshing: Promise<boolean> | null = null;
+
+  /** One refresh at a time: concurrent 401s all wait on the same attempt. */
+  function refreshSession(): Promise<boolean> {
+    refreshing ??= fetch(new URL("/auth/refresh", config.baseUrl), {
+      method: "POST",
+      credentials: "include",
+      headers: { "X-Envoy-App": config.app ?? "portal" },
+    })
+      .then(async (res) => {
+        if (!res.ok) return false;
+        config.onSession?.((await res.json()) as AuthResult);
+        return true;
+      })
+      .catch(() => false)
+      .finally(() => {
+        refreshing = null;
+      });
+    return refreshing;
+  }
+
   async function request<T>(
     path: string,
     options: { method?: string; body?: unknown; query?: Record<string, string | undefined> } = {},
+    retried = false,
   ): Promise<T> {
     const url = new URL(path, config.baseUrl);
     if (options.query) {
@@ -67,10 +97,14 @@ export function createApiClient(config: ApiClientConfig) {
       }
     }
 
+    const isAuthRoute = path.startsWith("/auth/");
     const token = config.getToken?.();
     const res = await fetch(url, {
       method: options.method ?? "GET",
+      // The refresh cookie is scoped to /auth, so only those calls need credentials.
+      credentials: isAuthRoute ? "include" : "same-origin",
       headers: {
+        "X-Envoy-App": config.app ?? "portal",
         ...(options.body ? { "Content-Type": "application/json" } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
@@ -78,7 +112,11 @@ export function createApiClient(config: ApiClientConfig) {
     });
 
     if (!res.ok) {
-      if (res.status === 401 && token) config.onUnauthorized?.();
+      if (res.status === 401 && token && !isAuthRoute) {
+        // Access token expired: refresh silently and retry once before giving up.
+        if (!retried && (await refreshSession())) return request<T>(path, options, true);
+        config.onUnauthorized?.();
+      }
       const text = await res.text().catch(() => res.statusText);
       throw new ApiError(res.status, text || res.statusText);
     }
@@ -98,14 +136,28 @@ export function createApiClient(config: ApiClientConfig) {
         request<AuthResult>("/auth/register", { method: "POST", body: input }),
       login: (input: { email: string; password: string }) =>
         request<AuthResult>("/auth/login", { method: "POST", body: input }),
+      /** Revokes this browser's session (or all of the user's sessions) and clears the refresh cookie. */
+      logout: (everywhere = false) =>
+        request<void>("/auth/logout", { method: "POST", query: { everywhere: everywhere ? "true" : undefined } }),
+      /** Always resolves — the response never reveals whether the email exists. `devToken` is only set in local dev (no email provider configured). */
+      requestPasswordReset: (email: string) =>
+        request<{ requested: true; devToken?: string }>("/auth/password-reset/request", { method: "POST", body: { email } }),
+      confirmPasswordReset: (token: string, password: string) =>
+        request<{ reset: true }>("/auth/password-reset/confirm", { method: "POST", body: { token, password } }),
+      requestEmailVerification: () =>
+        request<{ requested: true; devToken?: string }>("/auth/verify-email/request", { method: "POST" }),
+      confirmEmailVerification: (token: string) =>
+        request<{ verified: true }>("/auth/verify-email/confirm", { method: "POST", body: { token } }),
     },
 
     agents: {
       list: () => request<Agent[]>("/agents"),
       get: (id: string) => request<Agent>(`/agents/${id}`),
       create: (input: CreateAgentInput) => request<Agent>("/agents", { method: "POST", body: input }),
-      update: (id: string, input: Partial<CreateAgentInput> & { status?: Agent["status"] }) =>
-        request<Agent>(`/agents/${id}`, { method: "PATCH", body: input }),
+      update: (
+        id: string,
+        input: Partial<CreateAgentInput> & { status?: Agent["status"]; leadFormId?: string | null },
+      ) => request<Agent>(`/agents/${id}`, { method: "PATCH", body: input }),
     },
 
     conversations: {
@@ -116,6 +168,9 @@ export function createApiClient(config: ApiClientConfig) {
 
     billing: {
       getSubscription: () => request<Subscription>("/billing/subscription"),
+      checkout: () => request<{ mode: "mock" | "stripe"; url?: string }>("/billing/checkout", { method: "POST" }),
+      portal: () => request<{ mode: "mock" | "stripe"; url?: string }>("/billing/portal", { method: "POST" }),
+      getUsage: () => request<BillingUsage>("/billing/usage"),
     },
 
     crm: {
@@ -187,6 +242,10 @@ export function createApiClient(config: ApiClientConfig) {
       pauseTenant: (id: string) => request<void>(`/admin/tenants/${id}/pause`, { method: "PATCH" }),
       resumeTenant: (id: string) => request<void>(`/admin/tenants/${id}/resume`, { method: "PATCH" }),
       revokeTenant: (id: string) => request<void>(`/admin/tenants/${id}`, { method: "DELETE" }),
+      billOverage: (id: string) =>
+        request<{ mode: "mock" | "stripe"; charged: boolean; amountCents?: number }>(`/admin/tenants/${id}/bill-overage`, {
+          method: "POST",
+        }),
       updateUserAccess: (tenantId: string, userId: string, access: FeatureAccess) =>
         request<void>(`/admin/tenants/${tenantId}/users/${userId}/access`, {
           method: "PATCH",

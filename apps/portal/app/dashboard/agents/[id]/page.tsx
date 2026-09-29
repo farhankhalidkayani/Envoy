@@ -4,21 +4,17 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import type { Agent } from "@envoy/sdk";
-import type { RequiredFieldType } from "@envoy/types";
+import type { WidgetConfig } from "@envoy/types";
+import type { Form } from "@envoy/sdk";
+import { WidgetSettings } from "../../../../components/widget/WidgetSettings";
+import { RequiredFieldsBuilder } from "../../../../components/agent/RequiredFieldsBuilder";
+import { newId } from "@envoy/builder";
+import type { FieldRow } from "../../../../lib/agent-fields";
 import { api } from "../../../../lib/api";
 import { errorMessage } from "../../../../lib/errors";
 import { useToast } from "../../../../components/Toast";
 
 const WIDGET_ORIGIN = process.env.NEXT_PUBLIC_WIDGET_ORIGIN ?? "http://localhost:5173";
-const FIELD_TYPES: RequiredFieldType[] = ["text", "email", "phone", "number", "date", "boolean"];
-
-interface FieldRow {
-  key: string;
-  label: string;
-  type: RequiredFieldType;
-  required: boolean;
-  prompt: string;
-}
 
 interface RuleRow {
   id: string;
@@ -38,26 +34,52 @@ export default function AgentDetailPage() {
   const [script, setScript] = useState("");
   const [fields, setFields] = useState<FieldRow[]>([]);
   const [rules, setRules] = useState<RuleRow[]>([]);
+  const [widgetConfig, setWidgetConfig] = useState<WidgetConfig | null>(null);
+  const [leadFormId, setLeadFormId] = useState<string | null>(null);
+  const [forms, setForms] = useState<Form[]>([]);
 
   useEffect(() => {
+    // Guards against React StrictMode's double-invoke (and any real remount):
+    // without this, a second in-flight fetch resolving after the user has
+    // already started editing would silently overwrite their in-progress
+    // changes with the original server data.
+    let cancelled = false;
     api.agents
       .get(params.id)
       .then((a) => {
+        if (cancelled) return;
         setAgent(a);
         setName(a.name);
         setScript(a.script);
         setFields(
           a.requiredFields.map((f) => ({
+            id: newId("fld"),
             key: f.key,
             label: f.label,
             type: f.type,
             required: f.required,
             prompt: f.prompt ?? "",
+            options: f.options ?? [],
           })),
         );
         setRules(a.hardRules.map((r) => ({ id: r.id, text: r.text, action: r.action })));
+        setWidgetConfig(a.widgetConfig);
+        setLeadFormId(a.leadFormId);
       })
-      .catch((err) => setError(errorMessage(err)));
+      .catch((err) => {
+        if (!cancelled) setError(errorMessage(err));
+      });
+    // Forms failing to load shouldn't block the rest of the page — the
+    // lead-form selector just falls back to "no forms available" (empty list).
+    api.forms
+      .list()
+      .then((f) => {
+        if (!cancelled) setForms(f);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [params.id]);
 
   async function toggleLive() {
@@ -73,16 +95,6 @@ export default function AgentDetailPage() {
     } finally {
       setPublishing(false);
     }
-  }
-
-  function addField() {
-    setFields((prev) => [...prev, { key: "", label: "", type: "text", required: true, prompt: "" }]);
-  }
-  function updateField(i: number, patch: Partial<FieldRow>) {
-    setFields((prev) => prev.map((f, idx) => (idx === i ? { ...f, ...patch } : f)));
-  }
-  function removeField(i: number) {
-    setFields((prev) => prev.filter((_, idx) => idx !== i));
   }
 
   function addRule() {
@@ -106,8 +118,17 @@ export default function AgentDetailPage() {
         script,
         requiredFields: fields
           .filter((f) => f.key && f.label)
-          .map((f) => ({ ...f, prompt: f.prompt || undefined })),
+          .map((f) => ({
+            key: f.key,
+            label: f.label,
+            type: f.type,
+            required: f.required,
+            prompt: f.prompt || undefined,
+            options: f.type === "select" ? f.options.filter(Boolean) : undefined,
+          })),
         hardRules: rules.filter((r) => r.text).map((r) => ({ ...r, severity: "high" })),
+        widgetConfig: widgetConfig ?? undefined,
+        leadFormId,
       });
       setAgent(updated);
       showToast("Changes saved.");
@@ -194,72 +215,12 @@ export default function AgentDetailPage() {
         </div>
 
         <div className="card" style={{ marginBottom: 16 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-            <strong style={{ fontSize: 13.5 }}>Required fields</strong>
-            <button type="button" className="btn" onClick={addField} style={{ fontSize: 12.5 }}>
-              + Add field
-            </button>
-          </div>
+          <strong style={{ fontSize: 13.5, display: "block", marginBottom: 4 }}>Required fields</strong>
           <p style={{ fontSize: 11.5, color: "var(--ink-faint)", marginBottom: 12 }}>
             What the agent must collect before finishing. The description is injected into the
-            agent's instructions so it knows exactly what to ask for and why.
+            agent's instructions so it knows exactly what to ask for and why. Drag to reorder.
           </p>
-          {fields.length === 0 && (
-            <p style={{ color: "var(--ink-faint)", fontSize: 12.5 }}>No required fields yet.</p>
-          )}
-          {fields.map((field, i) => (
-            <div
-              key={i}
-              style={{
-                border: "1px solid var(--line)",
-                borderRadius: "var(--radius-sm)",
-                padding: 10,
-                marginBottom: 8,
-              }}
-            >
-              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
-                <input
-                  placeholder="key (e.g. email)"
-                  value={field.key}
-                  onInput={(e) => updateField(i, { key: (e.target as HTMLInputElement).value })}
-                  style={{ flex: 1 }}
-                />
-                <input
-                  placeholder="Label"
-                  value={field.label}
-                  onInput={(e) => updateField(i, { label: (e.target as HTMLInputElement).value })}
-                  style={{ flex: 1 }}
-                />
-                <select
-                  value={field.type}
-                  onChange={(e) =>
-                    updateField(i, { type: (e.target as HTMLSelectElement).value as RequiredFieldType })
-                  }
-                  style={{ width: 110 }}
-                >
-                  {FIELD_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => removeField(i)}
-                  aria-label={`Remove field ${field.label || i + 1}`}
-                  style={{ fontSize: 12 }}
-                >
-                  ✕
-                </button>
-              </div>
-              <input
-                placeholder="Description for the agent (e.g. the visitor's preferred appointment date, in their own words)"
-                value={field.prompt}
-                onInput={(e) => updateField(i, { prompt: (e.target as HTMLInputElement).value })}
-              />
-            </div>
-          ))}
+          <RequiredFieldsBuilder fields={fields} onChange={setFields} />
         </div>
 
         <div className="card" style={{ marginBottom: 20 }}>
@@ -304,6 +265,16 @@ export default function AgentDetailPage() {
             </div>
           ))}
         </div>
+
+        {widgetConfig && (
+          <WidgetSettings
+            config={widgetConfig}
+            onChange={(update) => setWidgetConfig((c) => (c ? update(c) : c))}
+            leadFormId={leadFormId}
+            onLeadFormChange={setLeadFormId}
+            forms={forms}
+          />
+        )}
 
         <button type="submit" className="btn btn-primary" disabled={saving}>
           {saving ? "Saving…" : "Save changes"}

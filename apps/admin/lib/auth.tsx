@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { AuthResult } from "@envoy/sdk";
-import { TOKEN_STORAGE_KEY, USER_STORAGE_KEY } from "./api";
+import { api, TOKEN_STORAGE_KEY, USER_STORAGE_KEY } from "./api";
 
 type SessionUser = AuthResult["user"];
 
@@ -40,6 +40,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   function logout() {
+    // Revoke the server-side session too; local sign-out shouldn't wait on the network.
+    void api.auth.logout().catch(() => {});
     localStorage.removeItem(TOKEN_STORAGE_KEY);
     localStorage.removeItem(USER_STORAGE_KEY);
     setUser(null);

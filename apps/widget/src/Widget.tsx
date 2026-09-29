@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "preact/hooks";
-import { AgentConnection, resolveAgent, type PublicAgent } from "./api.js";
+import { AgentConnection, PORTAL_ORIGIN, resolveAgent, type PublicAgent } from "./api.js";
 
 type ChatMessage = { role: "agent" | "user"; text: string; heard?: boolean };
 type Status = "connecting" | "chatting" | "completed" | "locked" | "error";
@@ -54,6 +54,7 @@ export function Widget() {
   const [errorText, setErrorText] = useState("");
   const [recording, setRecording] = useState<RecordingState>("idle");
   const [awaitingReply, setAwaitingReply] = useState(false);
+  const [view, setView] = useState<"chat" | "form">("chat");
   const connectionRef = useRef<AgentConnection | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -141,15 +142,24 @@ export function Widget() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages, awaitingReply]);
 
-  function submit(e: Event) {
-    e.preventDefault();
-    const text = draft.trim();
+  function send(text: string) {
     if (!text || status !== "chatting") return;
     setMessages((prev) => [...prev, { role: "user", text }]);
     connectionRef.current?.sendMessage(text);
     setAwaitingReply(true);
+  }
+
+  function submit(e: Event) {
+    e.preventDefault();
+    const text = draft.trim();
+    send(text);
     setDraft("");
   }
+
+  // Quick-reply chips are only useful before the visitor has said anything —
+  // once a real conversation is under way, suggesting the same canned
+  // openers again would be noise, not help.
+  const showQuickReplies = messages.every((m) => m.role !== "user") && (agent?.widgetConfig.quickReplies.length ?? 0) > 0;
 
   async function toggleRecording() {
     if (status !== "chatting") return;
@@ -203,11 +213,48 @@ export function Widget() {
           padding: "12px 16px",
           fontWeight: 600,
           fontSize: 15,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
         }}
       >
-        Chat
+        {view === "form" ? (
+          <button
+            type="button"
+            onClick={() => setView("chat")}
+            style={{ background: "none", border: "none", color: "#fff", font: "inherit", fontWeight: 600, cursor: "pointer", padding: 0 }}
+          >
+            ← Back to chat
+          </button>
+        ) : (
+          <span>Chat</span>
+        )}
+        {view === "chat" && agent?.leadFormToken && (
+          <button
+            type="button"
+            onClick={() => setView("form")}
+            style={{
+              background: "rgba(255,255,255,0.18)",
+              border: "none",
+              color: "#fff",
+              borderRadius: 6,
+              padding: "4px 9px",
+              fontSize: 12.5,
+              cursor: "pointer",
+            }}
+          >
+            📝 Fill out form
+          </button>
+        )}
       </header>
 
+      {view === "form" && agent?.leadFormToken ? (
+        <iframe
+          title="Lead form"
+          src={`${PORTAL_ORIGIN}/f/${agent.leadFormToken}?embed=1`}
+          style={{ flex: 1, border: "none", width: "100%" }}
+        />
+      ) : (
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "12px 16px" }}>
         {messages.map((m, i) => (
           <div
@@ -235,6 +282,30 @@ export function Widget() {
             </div>
           </div>
         ))}
+
+        {showQuickReplies && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+            {agent!.widgetConfig.quickReplies.map((q) => (
+              <button
+                key={q.id}
+                type="button"
+                onClick={() => send(q.message)}
+                disabled={status !== "chatting"}
+                style={{
+                  border: `1px solid ${accent}`,
+                  color: accent,
+                  background: "#fff",
+                  borderRadius: 999,
+                  padding: "6px 12px",
+                  fontSize: 13,
+                  cursor: status === "chatting" ? "pointer" : "default",
+                }}
+              >
+                {q.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {status === "connecting" && (
           <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 8 }}>
@@ -284,9 +355,11 @@ export function Widget() {
           </div>
         )}
       </div>
+      )}
 
       <audio ref={audioRef} style={{ display: "none" }} />
 
+      {view === "chat" && (
       <form onSubmit={submit} style={{ display: "flex", borderTop: "1px solid #e6eaf0", padding: 8 }}>
         {agent?.voiceEnabled && (
           <button
@@ -337,6 +410,7 @@ export function Widget() {
           Send
         </button>
       </form>
+      )}
     </div>
   );
 }

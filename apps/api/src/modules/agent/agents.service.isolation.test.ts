@@ -1,4 +1,4 @@
-import { NotFoundException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@envoy/db";
 import { PrismaService } from "../core/prisma/prisma.service.js";
@@ -54,5 +54,24 @@ describe("AgentsService tenant isolation", () => {
 
     const stillOwnedByA = await agents.findOneScoped(tenantA.id, agentA.id);
     expect(stillOwnedByA.name).toBe("Tenant A Agent");
+  });
+
+  it("refuses to link a lead form owned by another tenant (IDOR guard)", async () => {
+    const bForm = await prisma.form.create({
+      data: { tenantId: tenantB.id, name: "B's form", schema: { steps: [{ id: "s", fields: [] }] } },
+    });
+    await expect(agents.update(tenantA.id, agentA.id, { leadFormId: bForm.id })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    const unchanged = await agents.findOneScoped(tenantA.id, agentA.id);
+    expect(unchanged.leadFormId).toBeNull();
+  });
+
+  it("links a lead form the tenant actually owns", async () => {
+    const aForm = await prisma.form.create({
+      data: { tenantId: tenantA.id, name: "A's form", schema: { steps: [{ id: "s", fields: [] }] } },
+    });
+    const updated = await agents.update(tenantA.id, agentA.id, { leadFormId: aForm.id });
+    expect(updated.leadFormId).toBe(aForm.id);
   });
 });

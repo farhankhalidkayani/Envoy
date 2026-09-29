@@ -2,17 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { RequiredFieldType } from "@envoy/types";
+import { newId } from "@envoy/builder";
+import { RequiredFieldsBuilder } from "../../../../components/agent/RequiredFieldsBuilder";
+import type { FieldRow } from "../../../../lib/agent-fields";
 import { api } from "../../../../lib/api";
 import { errorMessage } from "../../../../lib/errors";
-
-interface FieldRow {
-  key: string;
-  label: string;
-  type: RequiredFieldType;
-  required: boolean;
-  prompt: string;
-}
 
 interface RuleRow {
   id: string;
@@ -20,34 +14,24 @@ interface RuleRow {
   action: "block" | "escalate";
 }
 
-const FIELD_TYPES: RequiredFieldType[] = ["text", "email", "phone", "number", "date", "boolean"];
-
 export default function NewAgentPage() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [script, setScript] = useState("");
   const [fields, setFields] = useState<FieldRow[]>([
     {
+      id: newId("fld"),
       key: "email",
       label: "Email",
       type: "email",
       required: true,
       prompt: "The visitor's email address, so we can follow up.",
+      options: [],
     },
   ]);
   const [rules, setRules] = useState<RuleRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
-  function addField() {
-    setFields((prev) => [...prev, { key: "", label: "", type: "text", required: true, prompt: "" }]);
-  }
-  function updateField(i: number, patch: Partial<FieldRow>) {
-    setFields((prev) => prev.map((f, idx) => (idx === i ? { ...f, ...patch } : f)));
-  }
-  function removeField(i: number) {
-    setFields((prev) => prev.filter((_, idx) => idx !== i));
-  }
 
   function addRule() {
     setRules((prev) => [...prev, { id: `rule_${prev.length + 1}`, text: "", action: "block" }]);
@@ -69,7 +53,14 @@ export default function NewAgentPage() {
         script,
         requiredFields: fields
           .filter((f) => f.key && f.label)
-          .map((f) => ({ ...f, prompt: f.prompt || undefined })),
+          .map((f) => ({
+            key: f.key,
+            label: f.label,
+            type: f.type,
+            required: f.required,
+            prompt: f.prompt || undefined,
+            options: f.type === "select" ? f.options.filter(Boolean) : undefined,
+          })),
         hardRules: rules.filter((r) => r.text).map((r) => ({ ...r, severity: "high" })),
       });
       router.push(`/dashboard/agents/${agent.id}`);
@@ -108,69 +99,12 @@ export default function NewAgentPage() {
         </div>
 
         <div className="card" style={{ marginBottom: 16 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-            <strong style={{ fontSize: 13.5 }}>Required fields</strong>
-            <button type="button" className="btn" onClick={addField} style={{ fontSize: 12.5 }}>
-              + Add field
-            </button>
-          </div>
+          <strong style={{ fontSize: 13.5, display: "block", marginBottom: 4 }}>Required fields</strong>
           <p style={{ fontSize: 11.5, color: "var(--ink-faint)", marginBottom: 12 }}>
             What the agent must collect before finishing. The description is injected into the
-            agent's instructions so it knows exactly what to ask for and why.
+            agent's instructions so it knows exactly what to ask for and why. Drag to reorder.
           </p>
-          {fields.map((field, i) => (
-            <div
-              key={i}
-              style={{
-                border: "1px solid var(--line)",
-                borderRadius: "var(--radius-sm)",
-                padding: 10,
-                marginBottom: 8,
-              }}
-            >
-              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
-                <input
-                  placeholder="key (e.g. email)"
-                  value={field.key}
-                  onInput={(e) => updateField(i, { key: (e.target as HTMLInputElement).value })}
-                  style={{ flex: 1 }}
-                />
-                <input
-                  placeholder="Label"
-                  value={field.label}
-                  onInput={(e) => updateField(i, { label: (e.target as HTMLInputElement).value })}
-                  style={{ flex: 1 }}
-                />
-                <select
-                  value={field.type}
-                  onChange={(e) =>
-                    updateField(i, { type: (e.target as HTMLSelectElement).value as RequiredFieldType })
-                  }
-                  style={{ width: 110 }}
-                >
-                  {FIELD_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => removeField(i)}
-                  aria-label={`Remove field ${field.label || i + 1}`}
-                  style={{ fontSize: 12 }}
-                >
-                  ✕
-                </button>
-              </div>
-              <input
-                placeholder="Description for the agent (e.g. the visitor's preferred appointment date, in their own words)"
-                value={field.prompt}
-                onInput={(e) => updateField(i, { prompt: (e.target as HTMLInputElement).value })}
-              />
-            </div>
-          ))}
+          <RequiredFieldsBuilder fields={fields} onChange={setFields} />
         </div>
 
         <div className="card" style={{ marginBottom: 20 }}>

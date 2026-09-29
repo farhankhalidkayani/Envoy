@@ -101,6 +101,17 @@
   margin-bottom: 14px;
 }
 
+/* fixedContainers mode: a flat block list, no section chrome to frame it. */
+.eb-container.eb-bare {
+  background: transparent;
+  border: none;
+  margin-bottom: 0;
+}
+
+.eb-bare .eb-container-body {
+  padding: 0;
+}
+
 .eb-container.eb-selected {
   border-color: var(--eb-accent);
   box-shadow: 0 0 0 3px var(--eb-accent-soft);

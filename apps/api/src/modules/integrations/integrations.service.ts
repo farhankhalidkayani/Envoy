@@ -1,8 +1,10 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import type { Integration, IntegrationType, Prisma } from "@envoy/db";
 import { PrismaService } from "../core/prisma/prisma.service.js";
+import { RedisService } from "../core/redis/redis.service.js";
+import { consumeOAuthState, issueOAuthState } from "../core/common/oauth-state.js";
 import { decryptToken, encryptToken } from "../crm/token-crypto.js";
-import { packCalendarTokens, unpackCalendarTokens } from "./calendar-tokens.js";
+import { NEVER_EXPIRES, packTokens, refreshIfExpiring, tokensFromGrant, unpackTokens } from "../core/common/oauth-tokens.js";
 import { CalendarSender } from "./senders/calendar.sender.js";
 import { EmailSender } from "./senders/email.sender.js";
 import { WebhookSender } from "./senders/webhook.sender.js";
@@ -11,8 +13,6 @@ import type { CalendarConfig, EmailConfig, IntegrationPushResult, PushSource, We
 const GOOGLE_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
-// Refresh this long before actual expiry so a slow request never straddles the boundary.
-const TOKEN_REFRESH_SKEW_MS = 60_000;
 
 @Injectable()
 export class IntegrationsService {
@@ -20,6 +20,7 @@ export class IntegrationsService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
     private readonly webhookSender: WebhookSender,
     private readonly emailSender: EmailSender,
     private readonly calendarSender: CalendarSender,
@@ -55,11 +56,8 @@ export class IntegrationsService {
   async initiateCalendarConnect(tenantId: string): Promise<{ mode: "mock" | "oauth"; authorizeUrl?: string }> {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     if (!clientId) {
-      // Mock tokens never really expire — there's no live Google account behind them to refresh against.
-      const mockTokens = packCalendarTokens({
-        accessToken: "mock_access_token",
-        expiresAt: Date.now() + 100 * 365 * 24 * 60 * 60_000,
-      });
+      // Mock tokens never expire — there's no live Google account behind them to refresh against.
+      const mockTokens = packTokens({ accessToken: "mock_access_token", expiresAt: NEVER_EXPIRES });
       await this.prisma.client.integration.upsert({
         where: { tenantId_type: { tenantId, type: "calendar" } },
         create: {
@@ -86,11 +84,12 @@ export class IntegrationsService {
     // silently-null one that breaks refresh once the access token expires.
     url.searchParams.set("prompt", "consent");
     url.searchParams.set("scope", GOOGLE_CALENDAR_SCOPE);
-    url.searchParams.set("state", tenantId);
+    url.searchParams.set("state", await issueOAuthState(this.redis.client, tenantId, "google_calendar"));
     return { mode: "oauth", authorizeUrl: url.toString() };
   }
 
-  async handleCalendarCallback(code: string, tenantId: string) {
+  async handleCalendarCallback(code: string, state: string | undefined) {
+    const tenantId = await consumeOAuthState(this.redis.client, state, "google_calendar");
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
     const redirectUri = process.env.GOOGLE_REDIRECT_URI ?? "http://localhost:4000/integrations/calendar/callback";
@@ -124,11 +123,7 @@ export class IntegrationsService {
       throw new BadRequestException("Google did not return a refresh token — reconnect and re-approve access");
     }
 
-    const packed = packCalendarTokens({
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      expiresAt: Date.now() + tokens.expires_in * 1000,
-    });
+    const packed = packTokens(tokensFromGrant(tokens));
     await this.prisma.client.integration.upsert({
       where: { tenantId_type: { tenantId, type: "calendar" } },
       create: {
@@ -141,53 +136,21 @@ export class IntegrationsService {
     });
   }
 
-  /**
-   * Returns a live access token for this calendar connection, transparently
-   * refreshing it against Google's token endpoint when it's within
-   * TOKEN_REFRESH_SKEW_MS of expiring, and persisting the refreshed token
-   * back so the next push doesn't refresh again.
-   */
+  /** Live access token for this calendar connection, refreshed and persisted when about to expire. */
   private async getFreshCalendarAccessToken(integration: Integration): Promise<string> {
-    const tokens = unpackCalendarTokens(decryptToken(integration.oauthTokens ?? ""));
-    if (tokens.expiresAt > Date.now() + TOKEN_REFRESH_SKEW_MS) {
-      return tokens.accessToken;
-    }
-    if (!tokens.refreshToken) {
-      // Mock-mode tokens are packed with a 100-year expiry and never reach here.
-      throw new Error("Calendar access token expired and no refresh token is stored — reconnect");
-    }
-
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    if (!clientId || !clientSecret) {
-      throw new Error("Google OAuth is not configured on this server — cannot refresh calendar token");
-    }
-
-    const response = await fetch(GOOGLE_TOKEN_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        client_id: clientId,
-        client_secret: clientSecret,
-        refresh_token: tokens.refreshToken,
-      }),
+    const tokens = unpackTokens(decryptToken(integration.oauthTokens ?? ""));
+    const refreshed = await refreshIfExpiring(tokens, {
+      tokenUrl: GOOGLE_TOKEN_URL,
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      providerName: "Google Calendar",
     });
-    if (!response.ok) {
-      throw new Error(`Google token refresh failed: ${await response.text().catch(() => response.statusText)}`);
-    }
-    // Google does not re-issue a refresh_token on a refresh grant — keep the one we have.
-    const refreshed = (await response.json()) as { access_token: string; expires_in: number };
-    const packed = packCalendarTokens({
-      accessToken: refreshed.access_token,
-      refreshToken: tokens.refreshToken,
-      expiresAt: Date.now() + refreshed.expires_in * 1000,
-    });
+    if (!refreshed) return tokens.accessToken;
     await this.prisma.client.integration.update({
       where: { id: integration.id },
-      data: { oauthTokens: encryptToken(packed) },
+      data: { oauthTokens: encryptToken(packTokens(refreshed)) },
     });
-    return refreshed.access_token;
+    return refreshed.accessToken;
   }
 
   async updateConfig(tenantId: string, type: IntegrationType, config: Record<string, unknown>) {

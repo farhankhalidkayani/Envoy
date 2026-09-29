@@ -78,6 +78,13 @@ export interface BlockBuilderProps<C, B> {
   paletteTitle?: string;
   /** Error text per block/container id, shown as a badge on the canvas. */
   issues?: Record<string, string>;
+  /**
+   * For a single fixed container (e.g. one flat, orderable list — no
+   * multi-container structure like form steps): hides the container header
+   * chrome (title, drag handle, delete) and the "+ Add {noun}" button.
+   * `containers` should have exactly one entry.
+   */
+  fixedContainers?: boolean;
 }
 
 type DragKind = "palette" | "block" | "container" | "body";
@@ -321,6 +328,7 @@ export function BlockBuilder<C, B>(props: BlockBuilderProps<C, B>) {
                 header={props.renderContainerHeader(container, ci)}
                 noun={props.containerNoun ?? "section"}
                 canDelete={containers.length > 1}
+                hideChrome={props.fixedContainers}
                 onSelect={() => setSelected({ kind: "container", id: a.containerId(container) })}
                 onDelete={() => api.removeContainer(a.containerId(container))}
               >
@@ -346,17 +354,19 @@ export function BlockBuilder<C, B>(props: BlockBuilderProps<C, B>) {
               </SortableContainer>
             ))}
           </SortableContext>
-          <button
-            type="button"
-            className="eb-add-container"
-            onClick={() => {
-              const c = props.createContainer();
-              commit([...latest.current, c]);
-              setSelected({ kind: "container", id: a.containerId(c) });
-            }}
-          >
-            + Add {props.containerNoun ?? "section"}
-          </button>
+          {!props.fixedContainers && (
+            <button
+              type="button"
+              className="eb-add-container"
+              onClick={() => {
+                const c = props.createContainer();
+                commit([...latest.current, c]);
+                setSelected({ kind: "container", id: a.containerId(c) });
+              }}
+            >
+              + Add {props.containerNoun ?? "section"}
+            </button>
+          )}
         </section>
 
         <aside className="eb-inspector" aria-label="Inspector">
@@ -408,6 +418,7 @@ function SortableContainer(props: {
   header: ReactNode;
   noun: string;
   canDelete: boolean;
+  hideChrome?: boolean;
   onSelect(): void;
   onDelete(): void;
   children: ReactNode;
@@ -419,35 +430,37 @@ function SortableContainer(props: {
     <div
       ref={sortable.setNodeRef}
       style={style}
-      className={`eb-container${props.selected ? " eb-selected" : ""}${sortable.isDragging ? " eb-dragging" : ""}`}
+      className={`eb-container${props.hideChrome ? " eb-bare" : ""}${props.selected ? " eb-selected" : ""}${sortable.isDragging ? " eb-dragging" : ""}`}
     >
-      <div className="eb-container-header" onClick={props.onSelect}>
-        <button
-          type="button"
-          className="eb-handle"
-          aria-label={`Reorder ${props.noun}`}
-          {...sortable.attributes}
-          {...sortable.listeners}
-          onClick={(e) => e.stopPropagation()}
-        >
-          ⋮⋮
-        </button>
-        <div className="eb-container-title">{props.header}</div>
-        {props.issue && <span className="eb-issue" title={props.issue}>!</span>}
-        {props.canDelete && (
+      {!props.hideChrome && (
+        <div className="eb-container-header" onClick={props.onSelect}>
           <button
             type="button"
-            className="eb-icon-btn"
-            aria-label={`Delete ${props.noun}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              props.onDelete();
-            }}
+            className="eb-handle"
+            aria-label={`Reorder ${props.noun}`}
+            {...sortable.attributes}
+            {...sortable.listeners}
+            onClick={(e) => e.stopPropagation()}
           >
-            ✕
+            ⋮⋮
           </button>
-        )}
-      </div>
+          <div className="eb-container-title">{props.header}</div>
+          {props.issue && <span className="eb-issue" title={props.issue}>!</span>}
+          {props.canDelete && (
+            <button
+              type="button"
+              className="eb-icon-btn"
+              aria-label={`Delete ${props.noun}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                props.onDelete();
+              }}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      )}
       <div ref={body.setNodeRef} className={`eb-container-body${body.isOver ? " eb-over" : ""}`}>
         {props.children}
         <div className="eb-drop-hint">Drop blocks here</div>

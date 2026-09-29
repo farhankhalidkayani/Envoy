@@ -70,6 +70,9 @@ export default function LoginPage() {
       <p style={{ marginTop: 16, fontSize: 13 }}>
         New here? <Link href="/register">Create a workspace</Link>
       </p>
+      <p style={{ marginTop: 4, fontSize: 13 }}>
+        <Link href="/forgot-password">Forgot your password?</Link>
+      </p>
     </div>
   );
 }

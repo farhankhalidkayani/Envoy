@@ -21,10 +21,22 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [locked, setLocked] = useState(false);
+  const [resendState, setResendState] = useState<"idle" | "sending" | "sent">("idle");
+  const [devToken, setDevToken] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
   }, [loading, user, router]);
+
+  async function resendVerification() {
+    setResendState("sending");
+    try {
+      const result = await api.auth.requestEmailVerification();
+      setDevToken(result.devToken ?? null);
+    } finally {
+      setResendState("sent");
+    }
+  }
 
   useEffect(() => {
     if (!user) return;
@@ -78,6 +90,33 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </aside>
 
       <main className="app-main">
+        {!user.emailVerified && (
+          <div className="locked-banner">
+            <strong>Please verify your email.</strong>{" "}
+            {resendState === "sent" ? (
+              devToken ? (
+                <>
+                  No email provider is configured locally —{" "}
+                  <Link href={`/verify-email?token=${devToken}`}>use this link directly</Link>.
+                </>
+              ) : (
+                "Check your inbox for the verification link."
+              )
+            ) : (
+              <>
+                We sent a link when you signed up.{" "}
+                <button
+                  className="btn"
+                  style={{ fontSize: 12.5, padding: "2px 10px" }}
+                  onClick={resendVerification}
+                  disabled={resendState === "sending"}
+                >
+                  {resendState === "sending" ? "Sending…" : "Resend email"}
+                </button>
+              </>
+            )}
+          </div>
+        )}
         {locked && (
           <div className="locked-banner">
             <strong>This account is locked pending payment.</strong> Your widget is showing a

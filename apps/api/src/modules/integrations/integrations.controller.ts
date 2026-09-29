@@ -1,4 +1,6 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, UseGuards } from "@nestjs/common";
+import type { Response } from "express";
+import { portalReturnUrl } from "../core/common/oauth-state.js";
 import { z } from "zod";
 import { RequireFeature } from "../core/auth/decorators/require-feature.decorator.js";
 import { CurrentUser } from "../core/auth/decorators/current-user.decorator.js";
@@ -112,10 +114,20 @@ export class IntegrationsController {
     return this.integrations.pushForTenant(user.tenantId!, type, { formSubmissionId: submissionId });
   }
 
-  /** Public — Google's OAuth redirect target, same pattern as CrmController#callback. */
+  /** Public — Google's OAuth redirect target; `state` is a single-use nonce, see CrmController#callback. */
   @Get("calendar/callback")
-  async calendarCallback(@Query("code") code: string, @Query("state") tenantId: string) {
-    await this.integrations.handleCalendarCallback(code, tenantId);
-    return { connected: true };
+  async calendarCallback(
+    @Query("code") code: string,
+    @Query("state") state: string,
+    @Query("error") providerError: string | undefined,
+    @Res() res: Response,
+  ) {
+    try {
+      if (providerError) throw new Error(`Google declined the connection (${providerError})`);
+      await this.integrations.handleCalendarCallback(code, state);
+      res.redirect(portalReturnUrl("/dashboard/integrations", { connected: "calendar" }));
+    } catch (err) {
+      res.redirect(portalReturnUrl("/dashboard/integrations", { error: (err as Error).message }));
+    }
   }
 }

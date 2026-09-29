@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { z } from "zod";
 import { FeatureAccess, PriceConfig } from "@envoy/types";
 import { CurrentUser } from "../core/auth/decorators/current-user.decorator.js";
@@ -39,6 +39,11 @@ export class AdminController {
   @Patch("tenants/:id/resume")
   resume(@CurrentUser() user: JwtPayload, @Param("id") tenantId: string) {
     return this.admin.resume(user.sub, tenantId);
+  }
+
+  @Post("tenants/:id/bill-overage")
+  billOverage(@CurrentUser() user: JwtPayload, @Param("id") tenantId: string) {
+    return this.admin.billOverage(user.sub, tenantId);
   }
 
   @Delete("tenants/:id")

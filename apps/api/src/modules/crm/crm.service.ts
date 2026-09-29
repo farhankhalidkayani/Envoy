@@ -1,9 +1,12 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import type { Prisma } from "@envoy/db";
 import { PrismaService } from "../core/prisma/prisma.service.js";
+import { RedisService } from "../core/redis/redis.service.js";
+import { consumeOAuthState, issueOAuthState } from "../core/common/oauth-state.js";
 import { CRM_PROVIDER } from "./providers/crm-provider.module.js";
 import type { CrmProvider, CrmPushResult } from "./providers/types.js";
 import { decryptToken, encryptToken } from "./token-crypto.js";
+import { NEVER_EXPIRES, packTokens, refreshIfExpiring, tokensFromGrant, unpackTokens } from "../core/common/oauth-tokens.js";
 
 const HUBSPOT_AUTHORIZE_URL = "https://app.hubspot.com/oauth/authorize";
 const HUBSPOT_TOKEN_URL = "https://api.hubapi.com/oauth/v1/token";
@@ -15,6 +18,7 @@ export class CrmService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
     @Inject(CRM_PROVIDER) private readonly provider: CrmProvider,
   ) {}
 
@@ -40,7 +44,7 @@ export class CrmService {
         create: {
           tenantId,
           provider: "hubspot",
-          oauthTokens: encryptToken("mock_access_token"),
+          oauthTokens: encryptToken(packTokens({ accessToken: "mock_access_token", expiresAt: NEVER_EXPIRES })),
           fieldMapping: {},
         },
         update: {},
@@ -54,12 +58,13 @@ export class CrmService {
     url.searchParams.set("client_id", clientId);
     url.searchParams.set("redirect_uri", redirectUri);
     url.searchParams.set("scope", HUBSPOT_SCOPES);
-    url.searchParams.set("state", tenantId);
+    url.searchParams.set("state", await issueOAuthState(this.redis.client, tenantId, "hubspot"));
     return { mode: "oauth", authorizeUrl: url.toString() };
   }
 
   /** OAuth callback — exchanges the authorization code for tokens. Code-complete, not live-tested. */
-  async handleCallback(code: string, tenantId: string) {
+  async handleCallback(code: string, state: string | undefined) {
+    const tenantId = await consumeOAuthState(this.redis.client, state, "hubspot");
     const clientId = process.env.HUBSPOT_CLIENT_ID;
     const clientSecret = process.env.HUBSPOT_CLIENT_SECRET;
     const redirectUri = process.env.HUBSPOT_REDIRECT_URI ?? "http://localhost:4000/crm/callback";
@@ -81,17 +86,14 @@ export class CrmService {
     if (!response.ok) {
       throw new BadRequestException(`HubSpot token exchange failed: ${await response.text()}`);
     }
-    const tokens = (await response.json()) as { access_token: string };
+    // HubSpot access tokens live ~30 minutes; keep the refresh token so pushes keep working.
+    const grant = (await response.json()) as { access_token: string; refresh_token?: string; expires_in: number };
+    const packed = encryptToken(packTokens(tokensFromGrant(grant)));
 
     await this.prisma.client.crmConnection.upsert({
       where: { tenantId_provider: { tenantId, provider: "hubspot" } },
-      create: {
-        tenantId,
-        provider: "hubspot",
-        oauthTokens: encryptToken(tokens.access_token),
-        fieldMapping: {},
-      },
-      update: { oauthTokens: encryptToken(tokens.access_token) },
+      create: { tenantId, provider: "hubspot", oauthTokens: packed, fieldMapping: {} },
+      update: { oauthTokens: packed },
     });
   }
 
@@ -127,7 +129,31 @@ export class CrmService {
     for (const [key, value] of Object.entries(capturedData)) {
       mappedRecord[fieldMapping[key] ?? key] = value;
     }
-    return this.provider.pushRecord(decryptToken(connection.oauthTokens), mappedRecord);
+
+    let accessToken: string;
+    try {
+      accessToken = await this.freshAccessToken(connection.id, connection.oauthTokens);
+    } catch (err) {
+      return { success: false, error: (err as Error).message };
+    }
+    return this.provider.pushRecord(accessToken, mappedRecord);
+  }
+
+  /** Refreshes (and persists) the HubSpot token when it's about to expire. */
+  private async freshAccessToken(connectionId: string, encrypted: string): Promise<string> {
+    const tokens = unpackTokens(decryptToken(encrypted));
+    const refreshed = await refreshIfExpiring(tokens, {
+      tokenUrl: HUBSPOT_TOKEN_URL,
+      clientId: process.env.HUBSPOT_CLIENT_ID,
+      clientSecret: process.env.HUBSPOT_CLIENT_SECRET,
+      providerName: "HubSpot",
+    });
+    if (!refreshed) return tokens.accessToken;
+    await this.prisma.client.crmConnection.update({
+      where: { id: connectionId },
+      data: { oauthTokens: encryptToken(packTokens(refreshed)) },
+    });
+    return refreshed.accessToken;
   }
 
   private statusUpdate(result: CrmPushResult) {

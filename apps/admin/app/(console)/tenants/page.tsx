@@ -173,6 +173,27 @@ export default function TenantsPage() {
                     )}
                     {t.subscriptionStatus !== "cancelled" && (
                       <button
+                        className="btn"
+                        disabled={busyId === t.id}
+                        onClick={() =>
+                          withBusy(t.id, async () => {
+                            const result = await api.admin.billOverage(t.id);
+                            showToast(
+                              result.mode === "mock"
+                                ? "No live Stripe account configured — nothing to bill."
+                                : result.charged
+                                  ? `Billed $${((result.amountCents ?? 0) / 100).toFixed(2)} overage.`
+                                  : "No overage owed this cycle.",
+                            );
+                          })
+                        }
+                        title="Invoice this tenant's usage over their included allotment for the current billing cycle"
+                      >
+                        Bill overage
+                      </button>
+                    )}
+                    {t.subscriptionStatus !== "cancelled" && (
+                      <button
                         className="btn btn-danger"
                         disabled={busyId === t.id}
                         onClick={() => setPending({ kind: "revoke", tenant: t })}
