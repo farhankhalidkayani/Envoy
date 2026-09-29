@@ -72,6 +72,16 @@ export function PulseIcon({ size = 18 }: IconProps) {
   );
 }
 
+export function PlugIcon({ size = 18 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...base}>
+      <path d="M9 3v5M15 3v5" />
+      <rect x="6" y="8" width="12" height="7" rx="2" />
+      <path d="M12 15v3a3 3 0 0 1-3 3H7" />
+    </svg>
+  );
+}
+
 export function LogoMark({ size = 15 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">

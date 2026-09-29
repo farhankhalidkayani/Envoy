@@ -50,8 +50,15 @@ export class CrmController {
   @Post("push/:conversationId")
   @UseGuards(JwtAuthGuard, TenantScopeGuard, TenantLockGuard, FeatureGuard)
   @RequireFeature("crm")
-  pushConversation(@Param("conversationId") conversationId: string) {
-    return this.crm.pushConversation(conversationId);
+  pushConversation(@CurrentUser() user: JwtPayload, @Param("conversationId") conversationId: string) {
+    return this.crm.pushConversation(conversationId, user.tenantId!);
+  }
+
+  @Post("push/submission/:submissionId")
+  @UseGuards(JwtAuthGuard, TenantScopeGuard, TenantLockGuard, FeatureGuard)
+  @RequireFeature("crm")
+  pushSubmission(@CurrentUser() user: JwtPayload, @Param("submissionId") submissionId: string) {
+    return this.crm.pushFormSubmission(submissionId, user.tenantId!);
   }
 
   /**

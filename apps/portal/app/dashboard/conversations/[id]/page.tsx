@@ -8,12 +8,15 @@ import { api } from "../../../../lib/api";
 import { errorMessage } from "../../../../lib/errors";
 import { useToast } from "../../../../components/Toast";
 
+const INTEGRATION_LABELS = { webhook: "Webhook", email: "Email", calendar: "Calendar" } as const;
+
 export default function ConversationDetailPage() {
   const { showToast } = useToast();
   const params = useParams<{ id: string }>();
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pushing, setPushing] = useState(false);
+  const [pushingIntegration, setPushingIntegration] = useState<keyof typeof INTEGRATION_LABELS | null>(null);
 
   function load() {
     api.conversations.get(params.id).then(setConversation).catch((err) => setError(errorMessage(err)));
@@ -31,6 +34,20 @@ export default function ConversationDetailPage() {
       setError(errorMessage(err));
     } finally {
       setPushing(false);
+    }
+  }
+
+  async function rePushIntegration(type: keyof typeof INTEGRATION_LABELS) {
+    setPushingIntegration(type);
+    setError(null);
+    try {
+      await api.integrations.pushConversation(type, params.id);
+      load();
+      showToast(`${INTEGRATION_LABELS[type]} re-pushed.`);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setPushingIntegration(null);
     }
   }
 
@@ -112,6 +129,36 @@ export default function ConversationDetailPage() {
           )}
         </div>
       )}
+
+      {conversation.status === "completed" &&
+        (Object.keys(conversation.integrationStatus) as Array<keyof typeof INTEGRATION_LABELS>).map((type) => {
+          const status = conversation.integrationStatus[type];
+          return (
+            <div className="card" style={{ marginBottom: 16 }} key={type}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span>
+                  <strong style={{ fontSize: 13.5, marginRight: 8 }}>{INTEGRATION_LABELS[type]}</strong>
+                  {status?.pushedAt ? (
+                    <span className="pill pill-ok">pushed</span>
+                  ) : (
+                    <span className="pill pill-stop">failed</span>
+                  )}
+                </span>
+                <button
+                  className="btn"
+                  onClick={() => rePushIntegration(type)}
+                  disabled={pushingIntegration === type}
+                  style={{ fontSize: 12.5 }}
+                >
+                  {pushingIntegration === type ? "Pushing…" : "Re-push"}
+                </button>
+              </div>
+              {status?.error && (
+                <p style={{ fontSize: 12.5, color: "var(--stop)", marginTop: 8 }}>{status.error}</p>
+              )}
+            </div>
+          );
+        })}
 
       {conversation.aiSummary && (
         <div className="card" style={{ marginBottom: 16 }}>

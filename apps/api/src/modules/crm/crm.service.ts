@@ -114,43 +114,59 @@ export class CrmService {
 
   /**
    * Maps capturedData through the tenant's fieldMapping (envoy key -> CRM
-   * property name), pushes via the active provider, and reports the
-   * outcome. Called both automatically on conversation completion (see
-   * CrmPushProcessor) and manually from the dashboard's re-push action —
-   * same code path either way.
+   * property name) and pushes via the active provider. Source-agnostic —
+   * pushConversation/pushFormSubmission load the data and persist the
+   * outcome on their own row.
    */
-  async pushConversation(conversationId: string): Promise<CrmPushResult> {
-    const conversation = await this.prisma.client.conversation.findUnique({
-      where: { id: conversationId },
-    });
-    if (!conversation) return { success: false, error: "Conversation not found" };
-
-    const connection = await this.getConnection(conversation.tenantId);
+  private async pushRecord(tenantId: string, capturedData: Record<string, unknown>): Promise<CrmPushResult> {
+    const connection = await this.getConnection(tenantId);
     if (!connection) return { success: false, error: "Tenant has no CRM connection" };
 
-    const capturedData = (conversation.capturedData as Record<string, unknown>) ?? {};
     const fieldMapping = (connection.fieldMapping as Record<string, string>) ?? {};
     const mappedRecord: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(capturedData)) {
       mappedRecord[fieldMapping[key] ?? key] = value;
     }
+    return this.provider.pushRecord(decryptToken(connection.oauthTokens), mappedRecord);
+  }
 
-    const accessToken = decryptToken(connection.oauthTokens);
-    const result = await this.provider.pushRecord(accessToken, mappedRecord);
+  private statusUpdate(result: CrmPushResult) {
+    // Persisted so the dashboard can show "pushed to CRM ✓" per record —
+    // the ≥95%-pushed success metric needs this visible, not just logged.
+    return result.success
+      ? { crmPushedAt: new Date(), crmExternalId: result.externalId, crmPushError: null }
+      : { crmPushError: result.error };
+  }
 
-    // Persisted so the dashboard can show "pushed to CRM ✓" per
-    // conversation — the ≥95%-pushed success metric needs this to be
-    // visible, not just logged.
-    await this.prisma.client.conversation.update({
-      where: { id: conversationId },
-      data: result.success
-        ? { crmPushedAt: new Date(), crmExternalId: result.externalId, crmPushError: null }
-        : { crmPushError: result.error },
-    });
-
-    if (!result.success) {
-      this.logger.warn(`CRM push failed for conversation ${conversationId}: ${result.error}`);
+  /**
+   * Auto (CrmPushProcessor) and manual dashboard re-push share this path.
+   * `tenantId` is passed by the manual route so a tenant can't trigger
+   * pushes of another tenant's conversations by ID.
+   */
+  async pushConversation(conversationId: string, tenantId?: string): Promise<CrmPushResult> {
+    const conversation = await this.prisma.client.conversation.findUnique({ where: { id: conversationId } });
+    if (!conversation || (tenantId && conversation.tenantId !== tenantId)) {
+      return { success: false, error: "Conversation not found" };
     }
+
+    const result = await this.pushRecord(
+      conversation.tenantId,
+      (conversation.capturedData as Record<string, unknown>) ?? {},
+    );
+    await this.prisma.client.conversation.update({ where: { id: conversationId }, data: this.statusUpdate(result) });
+    if (!result.success) this.logger.warn(`CRM push failed for conversation ${conversationId}: ${result.error}`);
+    return result;
+  }
+
+  async pushFormSubmission(submissionId: string, tenantId?: string): Promise<CrmPushResult> {
+    const submission = await this.prisma.client.formSubmission.findUnique({ where: { id: submissionId } });
+    if (!submission || (tenantId && submission.tenantId !== tenantId)) {
+      return { success: false, error: "Form submission not found" };
+    }
+
+    const result = await this.pushRecord(submission.tenantId, (submission.data as Record<string, unknown>) ?? {});
+    await this.prisma.client.formSubmission.update({ where: { id: submissionId }, data: this.statusUpdate(result) });
+    if (!result.success) this.logger.warn(`CRM push failed for form submission ${submissionId}: ${result.error}`);
     return result;
   }
 }

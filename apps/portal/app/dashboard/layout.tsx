@@ -5,12 +5,13 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
-import { BotIcon, ChatIcon, SyncIcon, CardIcon, LogoMark } from "../../components/icons";
+import { BotIcon, ChatIcon, SyncIcon, CardIcon, PlugIcon, LogoMark } from "../../components/icons";
 
 const NAV = [
   { href: "/dashboard", label: "Agents", icon: BotIcon },
   { href: "/dashboard/conversations", label: "Conversations", icon: ChatIcon },
   { href: "/dashboard/crm", label: "CRM", icon: SyncIcon },
+  { href: "/dashboard/integrations", label: "Integrations", icon: PlugIcon },
   { href: "/dashboard/billing", label: "Billing", icon: CardIcon },
 ];
 

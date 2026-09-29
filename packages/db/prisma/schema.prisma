@@ -53,6 +53,12 @@ enum CrmProvider {
   zoho
 }
 
+enum IntegrationType {
+  calendar
+  email
+  webhook
+}
+
 // ─────────────────────────────────────────────────────────────
 // Core tenancy
 // ─────────────────────────────────────────────────────────────
@@ -66,12 +72,15 @@ model Tenant {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
-  users          User[]
-  agents         Agent[]
-  conversations  Conversation[]
-  crmConnections CrmConnection[]
-  subscription   Subscription?
-  auditLogs      AuditLog[]
+  users           User[]
+  agents          Agent[]
+  conversations   Conversation[]
+  crmConnections  CrmConnection[]
+  integrations    Integration[]
+  forms           Form[]
+  formSubmissions FormSubmission[]
+  subscription    Subscription?
+  auditLogs       AuditLog[]
 
   @@map("tenants")
 }
@@ -138,6 +147,7 @@ model Conversation {
   crmPushedAt           DateTime?
   crmExternalId         String?
   crmPushError          String?
+  integrationStatus     Json                @default("{}") // { [IntegrationType]: { pushedAt?: string, error?: string } }
   createdAt             DateTime            @default(now())
   completedAt           DateTime?
 
@@ -165,24 +175,89 @@ model CrmConnection {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Integrations (Google Calendar event, outbound email, custom webhook —
+// all fired on conversation completion, same trigger point as CRM push)
+// ─────────────────────────────────────────────────────────────
+
+model Integration {
+  id          String          @id @default(cuid())
+  tenantId    String
+  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  type        IntegrationType
+  config      Json            @default("{}") // per-type shape, see integrations/types.ts
+  oauthTokens String? // encrypted at rest — only set for type "calendar"
+  enabled     Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@unique([tenantId, type])
+  @@map("integrations")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Custom lead forms — submissions route through the same CRM +
+// integrations connections as completed conversations
+// ─────────────────────────────────────────────────────────────
+
+enum FormStatus {
+  draft
+  live
+}
+
+model Form {
+  id          String     @id @default(cuid())
+  tenantId    String
+  tenant      Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  status      FormStatus @default(draft)
+  schema      Json // FormSchema, validated by @envoy/types
+  publicToken String     @unique @default(cuid())
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  submissions FormSubmission[]
+
+  @@index([tenantId])
+  @@map("forms")
+}
+
+model FormSubmission {
+  id                String    @id @default(cuid())
+  formId            String
+  form              Form      @relation(fields: [formId], references: [id], onDelete: Cascade)
+  tenantId          String
+  tenant            Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  data              Json
+  crmPushedAt       DateTime?
+  crmExternalId     String?
+  crmPushError      String?
+  integrationStatus Json      @default("{}")
+  createdAt         DateTime  @default(now())
+
+  @@index([formId])
+  @@index([tenantId])
+  @@map("form_submissions")
+}
+
+// ─────────────────────────────────────────────────────────────
 // Billing
 // ─────────────────────────────────────────────────────────────
 
 model Subscription {
-  id                   String             @id @default(cuid())
-  tenantId             String             @unique
-  tenant               Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  status               SubscriptionStatus @default(active)
-  monthlyRate          Int // cents
-  usageRate            Int // cents per conversation over included allotment
-  includedConversations Int               @default(0)
-  billingCycleDay      Int                @default(1)
-  stripeCustomerId     String?
-  stripeSubscriptionId String?
-  lockedAt             DateTime?
-  unlockedAt           DateTime?
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
+  id                    String             @id @default(cuid())
+  tenantId              String             @unique
+  tenant                Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  status                SubscriptionStatus @default(active)
+  monthlyRate           Int // cents
+  usageRate             Int // cents per conversation over included allotment
+  includedConversations Int                @default(0)
+  billingCycleDay       Int                @default(1)
+  stripeCustomerId      String?
+  stripeSubscriptionId  String?
+  lockedAt              DateTime?
+  unlockedAt            DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
 
   @@map("subscriptions")
 }
@@ -192,14 +267,14 @@ model Subscription {
 // ─────────────────────────────────────────────────────────────
 
 model AuditLog {
-  id           String   @id @default(cuid())
-  adminUserId  String
-  adminUser    User     @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
-  tenantId     String?
-  tenant       Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
-  action       String
-  meta         Json     @default("{}")
-  createdAt    DateTime @default(now())
+  id          String   @id @default(cuid())
+  adminUserId String
+  adminUser   User     @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  tenantId    String?
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  action      String
+  meta        Json     @default("{}")
+  createdAt   DateTime @default(now())
 
   @@index([tenantId])
   @@index([adminUserId])

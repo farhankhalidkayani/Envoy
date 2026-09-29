@@ -5,9 +5,13 @@ import type {
   Agent,
   AuditLogEntry,
   AuthResult,
+  CalendarIntegrationConfig,
   Conversation,
   CrmConnection,
+  EmailIntegrationConfig,
+  Integration,
   Subscription,
+  WebhookIntegrationConfig,
 } from "./types";
 
 export class ApiError extends Error {
@@ -119,6 +123,28 @@ export function createApiClient(config: ApiClientConfig) {
       disconnect: () => request<void>("/crm/connection", { method: "DELETE" }),
       pushConversation: (conversationId: string) =>
         request<{ success: boolean; externalId?: string; error?: string }>(`/crm/push/${conversationId}`, {
+          method: "POST",
+        }),
+    },
+
+    integrations: {
+      list: () => request<Integration[]>("/integrations"),
+      connectWebhook: (config: WebhookIntegrationConfig) =>
+        request<Integration>("/integrations/webhook/connect", { method: "POST", body: config }),
+      connectEmail: (config: EmailIntegrationConfig) =>
+        request<Integration>("/integrations/email/connect", { method: "POST", body: config }),
+      connectCalendar: () =>
+        request<{ mode: "mock" | "oauth"; authorizeUrl?: string }>("/integrations/calendar/connect", {
+          method: "POST",
+        }),
+      updateConfig: (
+        type: "webhook" | "email" | "calendar",
+        config: WebhookIntegrationConfig | EmailIntegrationConfig | CalendarIntegrationConfig,
+      ) => request<Integration>(`/integrations/${type}/config`, { method: "PATCH", body: config }),
+      disconnect: (type: "webhook" | "email" | "calendar") =>
+        request<void>(`/integrations/${type}`, { method: "DELETE" }),
+      pushConversation: (type: "webhook" | "email" | "calendar", conversationId: string) =>
+        request<{ success: boolean; error?: string }>(`/integrations/${type}/push/${conversationId}`, {
           method: "POST",
         }),
     },

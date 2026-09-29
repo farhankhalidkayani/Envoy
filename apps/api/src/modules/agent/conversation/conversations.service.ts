@@ -3,8 +3,7 @@ import type { OutcomeType } from "@envoy/types";
 import type { Prisma } from "@envoy/db";
 import { PrismaService } from "../../core/prisma/prisma.service.js";
 import { PipelineQueueService } from "../../pipeline/pipeline-queue.service.js";
-import { CrmQueueService } from "../../crm/crm-queue.service.js";
-import { CrmService } from "../../crm/crm.service.js";
+import { CaptureRoutingService } from "../../routing/capture-routing.service.js";
 import type { LlmMessage } from "../providers/llm/types.js";
 
 @Injectable()
@@ -12,8 +11,7 @@ export class ConversationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly pipelineQueue: PipelineQueueService,
-    private readonly crmQueue: CrmQueueService,
-    private readonly crm: CrmService,
+    private readonly routing: CaptureRoutingService,
   ) {}
 
   async start(agentId: string, tenantId: string) {
@@ -66,14 +64,7 @@ export class ConversationsService {
       messages: params.history,
     });
 
-    // Auto-push is gated purely on "does this tenant have an active CRM
-    // connection" — not a per-user feature flag (that gates who can VIEW/
-    // EDIT the CRM connection in the portal, a different concern from
-    // whether completed conversations get pushed automatically).
-    const crmConnection = await this.crm.getConnection(conversation.tenantId);
-    if (crmConnection) {
-      await this.crmQueue.enqueuePush({ conversationId: params.conversationId });
-    }
+    await this.routing.route(conversation.tenantId, { conversationId: params.conversationId });
 
     return conversation;
   }

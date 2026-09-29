@@ -11,6 +11,7 @@ export const FEATURE_KEYS = [
   "recordings",
   "export",
   "voice",
+  "integrations",
 ] as const;
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
 
@@ -31,4 +32,5 @@ export const DEFAULT_FEATURE_ACCESS: FeatureAccess = {
   recordings: true,
   export: true,
   voice: false,
+  integrations: false,
 };

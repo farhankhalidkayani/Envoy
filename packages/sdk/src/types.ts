@@ -53,6 +53,7 @@ export interface Conversation {
   crmPushedAt: string | null;
   crmExternalId: string | null;
   crmPushError: string | null;
+  integrationStatus: Partial<Record<IntegrationType, { pushedAt?: string; error?: string }>>;
   createdAt: string;
   completedAt: string | null;
   agent?: { name: string };
@@ -65,6 +66,39 @@ export interface CrmConnection {
   fieldMapping: Record<string, string>;
   createdAt: string;
   updatedAt: string;
+}
+
+export type IntegrationType = "calendar" | "email" | "webhook";
+
+export interface Integration {
+  id: string;
+  tenantId: string;
+  type: IntegrationType;
+  config: Record<string, unknown>;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WebhookIntegrationConfig {
+  url: string;
+  method?: "POST" | "PUT" | "PATCH";
+  headers?: Record<string, string>;
+  payloadTemplate?: string;
+}
+
+export interface EmailIntegrationConfig {
+  to: string;
+  subject: string;
+  bodyTemplate: string;
+}
+
+export interface CalendarIntegrationConfig {
+  calendarId?: string;
+  titleTemplate: string;
+  descriptionTemplate?: string;
+  startField: string;
+  durationMinutes?: number;
 }
 
 export interface Subscription {

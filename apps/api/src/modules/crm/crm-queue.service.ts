@@ -4,8 +4,10 @@ import { createPipelineRedisConnection } from "../pipeline/pipeline-connection.j
 
 export const CRM_PUSH_QUEUE_NAME = "crm-push";
 
+/** Exactly one is set. Kept as optional fields (not a renamed union) so jobs already queued as `{conversationId}` still process after deploy. */
 export interface CrmPushJobData {
-  conversationId: string;
+  conversationId?: string;
+  formSubmissionId?: string;
 }
 
 /**

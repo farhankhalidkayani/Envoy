@@ -27,7 +27,10 @@ export class CrmPushProcessor implements OnModuleInit, OnModuleDestroy {
   }
 
   private async process(job: Job<CrmPushJobData>): Promise<void> {
-    const result = await this.crm.pushConversation(job.data.conversationId);
+    const { conversationId, formSubmissionId } = job.data;
+    const result = conversationId
+      ? await this.crm.pushConversation(conversationId)
+      : await this.crm.pushFormSubmission(formSubmissionId!);
     if (!result.success) {
       // Throwing lets BullMQ's attempts/backoff retry a transient failure
       // (network blip, rate limit) rather than silently dropping it.

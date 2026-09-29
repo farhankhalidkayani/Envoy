@@ -1,8 +1,8 @@
 import { Module } from "@nestjs/common";
 import { BillingModule } from "../billing/billing.module.js";
 import { CoreModule } from "../core/core.module.js";
-import { CrmModule } from "../crm/crm.module.js";
 import { PipelineModule } from "../pipeline/pipeline.module.js";
+import { RoutingModule } from "../routing/routing.module.js";
 import { AgentsController } from "./agents.controller.js";
 import { AgentsService } from "./agents.service.js";
 import { FieldExtractorService } from "./capture/field-extractor.service.js";
@@ -23,7 +23,14 @@ import { RuleEnforcerService } from "./rules/rule-enforcer.service.js";
  * WS protocol surface the widget talks to.
  */
 @Module({
-  imports: [CoreModule, LlmProviderModule, VoiceProviderModule, PipelineModule, BillingModule, CrmModule],
+  imports: [
+    CoreModule,
+    LlmProviderModule,
+    VoiceProviderModule,
+    PipelineModule,
+    BillingModule,
+    RoutingModule,
+  ],
   controllers: [AgentsController, PublicAgentsController, ConversationsController],
   providers: [
     AgentsService,

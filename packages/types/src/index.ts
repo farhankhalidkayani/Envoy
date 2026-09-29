@@ -5,3 +5,4 @@ export * from "./feature-access.js";
 export * from "./widget-config.js";
 export * from "./price-config.js";
 export * from "./ws.js";
+export * from "./form-schema.js";
