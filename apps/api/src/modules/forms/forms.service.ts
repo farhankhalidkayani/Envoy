@@ -83,13 +83,52 @@ export class FormsService {
     await this.prisma.client.form.delete({ where: { id } });
   }
 
-  async listSubmissions(tenantId: string, formId: string) {
+  async listSubmissions(tenantId: string, formId: string, opts: { cursor?: string; take?: number } = {}) {
     await this.get(tenantId, formId);
-    return this.prisma.client.formSubmission.findMany({
+    const take = Math.min(Math.max(opts.take ?? 50, 1), 200);
+    const rows = await this.prisma.client.formSubmission.findMany({
       where: { formId, tenantId },
       orderBy: { createdAt: "desc" },
-      take: 500,
+      take: take + 1, // one extra row tells us whether a next page exists
+      ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
     });
+    const nextCursor = rows.length > take ? rows[take - 1]!.id : undefined;
+    return { rows: rows.slice(0, take), nextCursor };
+  }
+
+  async deleteSubmission(tenantId: string, formId: string, submissionId: string) {
+    const { count } = await this.prisma.client.formSubmission.deleteMany({
+      where: { id: submissionId, formId, tenantId },
+    });
+    if (count === 0) throw new NotFoundException("Submission not found");
+  }
+
+  /** Every submission, oldest-safe cap so an unbounded form can't OOM the request. */
+  async exportSubmissionsCsv(tenantId: string, formId: string): Promise<string> {
+    const form = await this.get(tenantId, formId);
+    const schema = parseSchema(form.schema);
+    const rows = await this.prisma.client.formSubmission.findMany({
+      where: { formId, tenantId },
+      orderBy: { createdAt: "desc" },
+      take: 10_000,
+    });
+
+    const schemaKeys = schema.steps.flatMap((s) => s.fields).map((f) => f.key);
+    const extraKeys = [...new Set(rows.flatMap((r) => Object.keys(r.data as Record<string, unknown>)))].filter(
+      (k) => !schemaKeys.includes(k),
+    );
+    const columns = [...schemaKeys, ...extraKeys];
+
+    const csvCell = (value: unknown): string => {
+      const s = value === undefined || value === null ? "" : String(value);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = ["Submitted", ...columns].map(csvCell).join(",");
+    const lines = rows.map((r) => {
+      const data = r.data as Record<string, unknown>;
+      return [r.createdAt.toISOString(), ...columns.map((c) => data[c])].map(csvCell).join(",");
+    });
+    return [header, ...lines].join("\r\n");
   }
 
   private async getLive(publicToken: string) {
@@ -112,6 +151,12 @@ export class FormsService {
 
   async submit(publicToken: string, data: Record<string, unknown>) {
     const { form, schema } = await this.getLive(publicToken);
+    // Honeypot: "_hp" isn't a declared field (FieldKey can't start with "_"),
+    // so it's invisible to validateSubmission either way — only a bot that
+    // fills every input would set it. Pretend success; don't store or route.
+    if (typeof data._hp === "string" && data._hp.trim()) {
+      return { successMessage: schema.successMessage };
+    }
     // Re-validated server-side with the same function the renderer used —
     // never trust the browser's view of which fields were visible/valid.
     const result = validateSubmission(schema, data);

@@ -18,6 +18,10 @@ export const FIELD_TYPE_LABELS: Record<FormFieldType, string> = {
   select: "Dropdown",
   radio: "Multiple choice",
   checkbox: "Checkbox",
+  multiselect: "Checkboxes (multiple)",
+  file: "File upload",
+  hidden: "Hidden field",
+  content: "Text block",
 };
 
 const ICONS: Record<FormFieldType, string> = {
@@ -30,6 +34,10 @@ const ICONS: Record<FormFieldType, string> = {
   select: "▾",
   radio: "◉",
   checkbox: "☑",
+  multiselect: "☑☑",
+  file: "📎",
+  hidden: "⋯",
+  content: "H",
 };
 
 const GROUPS: Record<FormFieldType, string> = {
@@ -42,10 +50,14 @@ const GROUPS: Record<FormFieldType, string> = {
   select: "Choice",
   radio: "Choice",
   checkbox: "Choice",
+  multiselect: "Choice",
+  file: "Other",
+  hidden: "Advanced",
+  content: "Layout",
 };
 
 export function isChoice(type: FormFieldType) {
-  return type === "select" || type === "radio";
+  return type === "select" || type === "radio" || type === "multiselect";
 }
 
 export function newField(type: FormFieldType): FormField {
@@ -61,6 +73,8 @@ export function newField(type: FormFieldType): FormField {
           options: [optionFromLabel("Option 1"), optionFromLabel("Option 2")],
         }
       : {}),
+    ...(type === "content" ? { content: "Add your text here." } : {}),
+    ...(type === "hidden" ? { hiddenSource: { queryParam: "utm_source" } } : {}),
   };
 }
 

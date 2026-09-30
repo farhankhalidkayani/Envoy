@@ -5,15 +5,17 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
-import { BotIcon, ChatIcon, SyncIcon, CardIcon, PlugIcon, FormIcon, LogoMark } from "../../components/icons";
+import { BotIcon, ChatIcon, SyncIcon, CardIcon, PlugIcon, FormIcon, UsersIcon, SettingsIcon, LogoMark } from "../../components/icons";
 
 const NAV = [
   { href: "/dashboard", label: "Agents", icon: BotIcon },
+  { href: "/dashboard/leads", label: "Leads", icon: UsersIcon },
   { href: "/dashboard/conversations", label: "Conversations", icon: ChatIcon },
   { href: "/dashboard/forms", label: "Lead forms", icon: FormIcon },
   { href: "/dashboard/crm", label: "CRM", icon: SyncIcon },
   { href: "/dashboard/integrations", label: "Integrations", icon: PlugIcon },
   { href: "/dashboard/billing", label: "Billing", icon: CardIcon },
+  { href: "/dashboard/settings", label: "Settings", icon: SettingsIcon },
 ];
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {

@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Res, UseGuards } from "@nestjs/common";
+import type { Response } from "express";
 import { z } from "zod";
 import { ApiOptionsSource } from "@envoy/types";
 import { RequireFeature } from "../core/auth/decorators/require-feature.decorator.js";
@@ -65,8 +66,30 @@ export class FormsController {
     return this.forms.remove(user.tenantId!, id);
   }
 
+  // Declared before ":id/submissions" so "export" is never read as a submission cursor's neighbor.
+  @Get(":id/submissions/export")
+  async exportSubmissions(
+    @CurrentUser() user: JwtPayload,
+    @Param("id") id: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const csv = await this.forms.exportSubmissionsCsv(user.tenantId!, id);
+    res.set({ "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="submissions.csv"' });
+    return csv;
+  }
+
   @Get(":id/submissions")
-  submissions(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
-    return this.forms.listSubmissions(user.tenantId!, id);
+  submissions(
+    @CurrentUser() user: JwtPayload,
+    @Param("id") id: string,
+    @Query("cursor") cursor?: string,
+    @Query("take") take?: string,
+  ) {
+    return this.forms.listSubmissions(user.tenantId!, id, { cursor, take: take ? Number(take) : undefined });
+  }
+
+  @Delete(":id/submissions/:submissionId")
+  deleteSubmission(@CurrentUser() user: JwtPayload, @Param("id") id: string, @Param("submissionId") submissionId: string) {
+    return this.forms.deleteSubmission(user.tenantId!, id, submissionId);
   }
 }

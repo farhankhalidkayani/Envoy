@@ -51,6 +51,7 @@ export interface Conversation {
   capturedData: Record<string, unknown>;
   transcriptText: string | null;
   aiSummary: string | null;
+  aiSummaryError: string | null;
   ruleViolationsBlocked: Array<{ ruleId: string; action: string; candidateText: string; timestamp: string }>;
   recordingUrl: string | null;
   crmPushedAt: string | null;
@@ -171,6 +172,17 @@ export interface FormSubmission {
   crmPushError: string | null;
   integrationStatus: Partial<Record<IntegrationType, { pushedAt?: string; error?: string }>>;
   createdAt: string;
+}
+
+export interface Lead {
+  id: string;
+  source: "conversation" | "form";
+  sourceLabel: string;
+  data: Record<string, unknown>;
+  createdAt: string;
+  crmPushedAt: string | null;
+  crmPushError: string | null;
+  integrationStatus: Partial<Record<IntegrationType, { pushedAt?: string; error?: string }>>;
 }
 
 export interface PublicForm {

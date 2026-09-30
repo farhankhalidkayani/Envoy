@@ -59,8 +59,19 @@ export class ConversationsController {
 
   @Get()
   @UseGuards(JwtAuthGuard, TenantScopeGuard, TenantLockGuard)
-  findAll(@CurrentUser() user: JwtPayload, @Query("agentId") agentId?: string) {
-    return this.conversations.findAllForTenant(user.tenantId!, agentId);
+  findAll(
+    @CurrentUser() user: JwtPayload,
+    @Query("agentId") agentId?: string,
+    @Query("cursor") cursor?: string,
+    @Query("take") take?: string,
+  ) {
+    return this.conversations.findAllForTenant(user.tenantId!, agentId, { cursor, take: take ? Number(take) : undefined });
+  }
+
+  @Get("stats")
+  @UseGuards(JwtAuthGuard, TenantScopeGuard, TenantLockGuard)
+  getStats(@CurrentUser() user: JwtPayload, @Query("agentId") agentId?: string) {
+    return this.conversations.getStats(user.tenantId!, agentId);
   }
 
   @Get(":id")

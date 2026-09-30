@@ -7,6 +7,7 @@ import { JwtAuthGuard } from "../core/auth/guards/jwt-auth.guard.js";
 import { RolesGuard } from "../core/auth/guards/roles.guard.js";
 import type { JwtPayload } from "../core/auth/types.js";
 import { ZodValidationPipe } from "../core/common/zod-validation.pipe.js";
+import { AdminJobsService } from "./admin-jobs.service.js";
 import { AdminService } from "./admin.service.js";
 
 /**
@@ -19,11 +20,29 @@ import { AdminService } from "./admin.service.js";
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles("platform_admin")
 export class AdminController {
-  constructor(private readonly admin: AdminService) {}
+  constructor(
+    private readonly admin: AdminService,
+    private readonly jobs: AdminJobsService,
+  ) {}
+
+  @Get("jobs/failed")
+  listFailedJobs() {
+    return this.jobs.listFailed();
+  }
+
+  @Post("jobs/:queue/:id/retry")
+  retryJob(@Param("queue") queue: string, @Param("id") id: string) {
+    return this.jobs.retry(queue, id);
+  }
 
   @Get("tenants")
-  listTenants() {
-    return this.admin.listTenants();
+  listTenants(@Query("cursor") cursor?: string, @Query("take") take?: string) {
+    return this.admin.listTenants({ cursor, take: take ? Number(take) : undefined });
+  }
+
+  @Get("tenants/stats")
+  getTenantStats() {
+    return this.admin.getTenantStats();
   }
 
   @Get("tenants/:id")
@@ -49,6 +68,15 @@ export class AdminController {
   @Delete("tenants/:id")
   revoke(@CurrentUser() user: JwtPayload, @Param("id") tenantId: string) {
     return this.admin.revoke(user.sub, tenantId);
+  }
+
+  @Delete("tenants/:id/hard")
+  hardDelete(
+    @CurrentUser() user: JwtPayload,
+    @Param("id") tenantId: string,
+    @Body(new ZodValidationPipe(z.object({ confirmName: z.string().min(1) }))) body: { confirmName: string },
+  ) {
+    return this.admin.hardDeleteTenant(user.sub, tenantId, body.confirmName);
   }
 
   @Patch("tenants/:id/users/:uid/access")

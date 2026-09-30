@@ -13,6 +13,7 @@ import type {
   Form,
   FormSubmission,
   Integration,
+  Lead,
   PublicForm,
   Subscription,
   WebhookIntegrationConfig,
@@ -87,7 +88,13 @@ export function createApiClient(config: ApiClientConfig) {
 
   async function request<T>(
     path: string,
-    options: { method?: string; body?: unknown; query?: Record<string, string | undefined> } = {},
+    options: {
+      method?: string;
+      body?: unknown;
+      query?: Record<string, string | undefined>;
+      /** "blob" for a file download (CSV export) — everything else is parsed as JSON. */
+      responseType?: "json" | "blob";
+    } = {},
     retried = false,
   ): Promise<T> {
     const url = new URL(path, config.baseUrl);
@@ -120,6 +127,7 @@ export function createApiClient(config: ApiClientConfig) {
       const text = await res.text().catch(() => res.statusText);
       throw new ApiError(res.status, text || res.statusText);
     }
+    if (options.responseType === "blob") return (await res.blob()) as T;
     // A void-returning Nest handler sends 200 with an EMPTY body, not 204 —
     // res.json() throws a SyntaxError on that ("Unexpected end of JSON
     // input"), which silently broke every admin mutation (pause/resume/etc.)
@@ -161,9 +169,13 @@ export function createApiClient(config: ApiClientConfig) {
     },
 
     conversations: {
-      list: (agentId?: string) =>
-        request<Conversation[]>("/conversations", { query: { agentId } }),
+      list: (agentId?: string, opts: { cursor?: string; take?: number } = {}) =>
+        request<{ rows: Conversation[]; nextCursor?: string }>("/conversations", {
+          query: { agentId, cursor: opts.cursor, take: opts.take?.toString() },
+        }),
       get: (id: string) => request<Conversation>(`/conversations/${id}`),
+      getStats: (agentId?: string) =>
+        request<{ total: number; completed: number }>("/conversations/stats", { query: { agentId } }),
     },
 
     billing: {
@@ -222,9 +234,32 @@ export function createApiClient(config: ApiClientConfig) {
       update: (id: string, input: { name?: string; status?: Form["status"]; schema?: FormSchema }) =>
         request<Form>(`/forms/${id}`, { method: "PATCH", body: input }),
       remove: (id: string) => request<void>(`/forms/${id}`, { method: "DELETE" }),
-      submissions: (id: string) => request<FormSubmission[]>(`/forms/${id}/submissions`),
+      submissions: (id: string, opts: { cursor?: string; take?: number } = {}) =>
+        request<{ rows: FormSubmission[]; nextCursor?: string }>(`/forms/${id}/submissions`, {
+          query: { cursor: opts.cursor, take: opts.take?.toString() },
+        }),
+      deleteSubmission: (id: string, submissionId: string) =>
+        request<void>(`/forms/${id}/submissions/${submissionId}`, { method: "DELETE" }),
+      exportSubmissionsCsv: (id: string) =>
+        request<Blob>(`/forms/${id}/submissions/export`, { responseType: "blob" }),
       testOptions: (source: ApiOptionsSource, answers: Record<string, unknown> = {}) =>
         request<FormOption[]>("/forms/options/test", { method: "POST", body: { source, answers } }),
+    },
+
+    leads: {
+      list: (limit?: number) =>
+        request<{ leads: Lead[]; hasMore: boolean }>("/leads", { query: { limit: limit?.toString() } }),
+      getStats: () =>
+        request<{ totalForms: number; liveForms: number; totalSubmissions: number; totalLeadConversations: number }>(
+          "/leads/stats",
+        ),
+    },
+
+    account: {
+      getInfo: () => request<{ name: string }>("/account"),
+      exportData: () => request<Blob>("/account/export", { responseType: "blob" }),
+      deleteAccount: (confirmName: string) =>
+        request<void>("/account", { method: "DELETE", body: { confirmName } }),
     },
 
     /** Unauthenticated — used by the hosted form page. */
@@ -237,11 +272,18 @@ export function createApiClient(config: ApiClientConfig) {
     },
 
     admin: {
-      listTenants: () => request<AdminTenant[]>("/admin/tenants"),
+      listTenants: (opts: { cursor?: string; take?: number } = {}) =>
+        request<{ rows: AdminTenant[]; nextCursor?: string }>("/admin/tenants", {
+          query: { cursor: opts.cursor, take: opts.take?.toString() },
+        }),
+      getTenantStats: () =>
+        request<{ total: number; active: number; attention: number; mrrCents: number }>("/admin/tenants/stats"),
       getTenant: (id: string) => request<AdminTenantDetail>(`/admin/tenants/${id}`),
       pauseTenant: (id: string) => request<void>(`/admin/tenants/${id}/pause`, { method: "PATCH" }),
       resumeTenant: (id: string) => request<void>(`/admin/tenants/${id}/resume`, { method: "PATCH" }),
       revokeTenant: (id: string) => request<void>(`/admin/tenants/${id}`, { method: "DELETE" }),
+      hardDeleteTenant: (id: string, confirmName: string) =>
+        request<void>(`/admin/tenants/${id}/hard`, { method: "DELETE", body: { confirmName } }),
       billOverage: (id: string) =>
         request<{ mode: "mock" | "stripe"; charged: boolean; amountCents?: number }>(`/admin/tenants/${id}/bill-overage`, {
           method: "POST",
@@ -258,6 +300,19 @@ export function createApiClient(config: ApiClientConfig) {
         request<void>(`/admin/tenants/${tenantId}/pricing`, { method: "PATCH", body: priceConfig }),
       listAuditLog: (tenantId?: string) =>
         request<AuditLogEntry[]>("/admin/audit-log", { query: { tenantId } }),
+      listFailedJobs: () =>
+        request<
+          Array<{
+            queue: string;
+            id: string;
+            name: string;
+            data: Record<string, unknown>;
+            failedReason: string;
+            attemptsMade: number;
+            timestamp: number;
+          }>
+        >("/admin/jobs/failed"),
+      retryJob: (queue: string, id: string) => request<void>(`/admin/jobs/${queue}/${id}/retry`, { method: "POST" }),
     },
   };
 }

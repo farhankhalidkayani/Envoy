@@ -3,6 +3,7 @@ import type { Integration, IntegrationType, Prisma } from "@envoy/db";
 import { PrismaService } from "../core/prisma/prisma.service.js";
 import { RedisService } from "../core/redis/redis.service.js";
 import { consumeOAuthState, issueOAuthState } from "../core/common/oauth-state.js";
+import { sanitizeCapturedData } from "../core/common/sanitize-captured-data.js";
 import { decryptToken, encryptToken } from "../crm/token-crypto.js";
 import { NEVER_EXPIRES, packTokens, refreshIfExpiring, tokensFromGrant, unpackTokens } from "../core/common/oauth-tokens.js";
 import { CalendarSender } from "./senders/calendar.sender.js";
@@ -190,8 +191,9 @@ export class IntegrationsService {
     // captured data to their own webhook/email by guessing an ID.
     if (!record || record.tenantId !== integration.tenantId) return { success: false, error: "Record not found" };
 
-    const capturedData =
-      (("capturedData" in record ? record.capturedData : record.data) as Record<string, unknown>) ?? {};
+    const capturedData = sanitizeCapturedData(
+      (("capturedData" in record ? record.capturedData : record.data) as Record<string, unknown>) ?? {},
+    );
     const config = integration.config as unknown;
 
     let result: IntegrationPushResult;

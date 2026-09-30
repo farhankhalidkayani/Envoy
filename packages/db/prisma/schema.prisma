@@ -198,6 +198,9 @@ model Conversation {
   capturedData          Json                @default("{}")
   transcriptText        String?
   aiSummary             String?
+  /// Set once the summary job exhausts all its retry attempts — distinct
+  /// from aiSummary being null while the job just hasn't run yet.
+  aiSummaryError        String?
   ruleViolationsBlocked Json                @default("[]")
   recordingUrl          String?
   crmPushedAt           DateTime?

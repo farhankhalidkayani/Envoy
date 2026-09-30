@@ -14,11 +14,33 @@ const STATUS_PILL: Record<Conversation["status"], string> = {
 
 export default function ConversationsPage() {
   const [conversations, setConversations] = useState<Conversation[] | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.conversations.list().then(setConversations).catch((err) => setError(errorMessage(err)));
+    api.conversations
+      .list()
+      .then((page) => {
+        setConversations(page.rows);
+        setNextCursor(page.nextCursor);
+      })
+      .catch((err) => setError(errorMessage(err)));
   }, []);
+
+  async function loadMore() {
+    if (!nextCursor) return;
+    setLoadingMore(true);
+    try {
+      const page = await api.conversations.list(undefined, { cursor: nextCursor });
+      setConversations((prev) => [...(prev ?? []), ...page.rows]);
+      setNextCursor(page.nextCursor);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   return (
     <div>
@@ -67,6 +89,13 @@ export default function ConversationsPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+      {nextCursor && (
+        <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
+          <button className="btn" onClick={loadMore} disabled={loadingMore}>
+            {loadingMore ? "Loading…" : "Load more"}
+          </button>
         </div>
       )}
     </div>

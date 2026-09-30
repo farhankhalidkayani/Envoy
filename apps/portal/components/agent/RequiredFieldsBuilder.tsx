@@ -26,11 +26,7 @@ export function RequiredFieldsBuilder({
       adapter={fieldRowAdapter}
       containers={containers}
       fixedContainers
-      onChange={(next) => {
-        // eslint-disable-next-line no-console
-        console.log("[debug] RequiredFieldsBuilder onChange", JSON.stringify(next[0]!.items.map((f) => f.label)));
-        onChange(next[0]!.items);
-      }}
+      onChange={(next) => onChange(next[0]!.items)}
       palette={FIELD_ROW_PALETTE}
       paletteTitle="Add"
       cloneBlock={cloneFieldRow}

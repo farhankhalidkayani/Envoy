@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import type { FeatureAccess, PriceConfig } from "@envoy/types";
 import type { Prisma } from "@envoy/db";
 import { PrismaService } from "../core/prisma/prisma.service.js";
@@ -16,14 +16,37 @@ export class AdminService {
     private readonly billing: BillingService,
   ) {}
 
-  async listTenants() {
-    return this.prisma.client.tenant.findMany({
+  async listTenants(opts: { cursor?: string; take?: number } = {}) {
+    const take = Math.min(Math.max(opts.take ?? 50, 1), 200);
+    const rows = await this.prisma.client.tenant.findMany({
       orderBy: { createdAt: "desc" },
+      take: take + 1,
+      ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
       include: {
         subscription: true,
         _count: { select: { agents: true, users: true, conversations: true } },
       },
     });
+    const nextCursor = rows.length > take ? rows[take - 1]!.id : undefined;
+    return { rows: rows.slice(0, take), nextCursor };
+  }
+
+  /**
+   * Aggregated server-side rather than reduced over a page of `listTenants` —
+   * a paginated list only ever holds a slice, so these counts/sums have to
+   * come from the whole table regardless of what page the operator is on.
+   */
+  async getTenantStats() {
+    const [total, active, attention, mrr] = await Promise.all([
+      this.prisma.client.tenant.count(),
+      this.prisma.client.tenant.count({ where: { subscriptionStatus: "active" } }),
+      this.prisma.client.tenant.count({ where: { subscriptionStatus: { in: ["past_due", "locked"] } } }),
+      this.prisma.client.subscription.aggregate({
+        _sum: { monthlyRate: true },
+        where: { tenant: { subscriptionStatus: { in: ["active", "past_due"] } } },
+      }),
+    ]);
+    return { total, active, attention, mrrCents: mrr._sum.monthlyRate ?? 0 };
   }
 
   async getTenant(tenantId: string) {
@@ -64,6 +87,23 @@ export class AdminService {
     await this.assertTenantExists(tenantId);
     await this.billing.transitionStatus(tenantId, "cancelled");
     await this.audit(adminUserId, tenantId, "tenant.revoked");
+  }
+
+  /**
+   * Distinct from `revoke` (a reversible soft-cancel) — this permanently
+   * deletes the tenant and everything scoped to it. Requires the operator
+   * to type the tenant's exact name, same confirm-by-typing pattern as the
+   * tenant's own self-service delete (account.service.ts).
+   */
+  async hardDeleteTenant(adminUserId: string, tenantId: string, confirmName: string) {
+    const tenant = await this.assertTenantExists(tenantId);
+    if (confirmName !== tenant.name) {
+      throw new BadRequestException("Type the exact tenant name to confirm deletion");
+    }
+    // Written before the delete so it lands while tenantId is still valid —
+    // the FK is onDelete: SetNull, so the row survives with tenantId nulled.
+    await this.audit(adminUserId, tenantId, "tenant.hard_deleted", { name: tenant.name });
+    await this.prisma.client.tenant.delete({ where: { id: tenantId } });
   }
 
   async updateUserFeatureAccess(

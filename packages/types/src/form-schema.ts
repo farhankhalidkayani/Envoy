@@ -23,10 +23,19 @@ export const FormFieldType = z.enum([
   "select",
   "radio",
   "checkbox",
+  "multiselect",
+  "file",
+  "hidden",
+  "content",
 ]);
 export type FormFieldType = z.infer<typeof FormFieldType>;
 
+/** Types whose value is picked from `options`/`optionsSource` — single-value. */
 export const CHOICE_FIELD_TYPES: readonly FormFieldType[] = ["select", "radio"];
+/** Same as CHOICE_FIELD_TYPES, but the value is an array of selections. */
+export const MULTI_CHOICE_FIELD_TYPES: readonly FormFieldType[] = ["multiselect"];
+/** No visitor input at all: "content" is a static block, "hidden" is populated from the page URL. */
+export const NON_INPUT_FIELD_TYPES: readonly FormFieldType[] = ["content", "hidden"];
 
 export const ConditionOp = z.enum(["equals", "not_equals", "contains", "gt", "lt", "is_empty", "is_not_empty"]);
 export type ConditionOp = z.infer<typeof ConditionOp>;
@@ -63,6 +72,15 @@ export const ApiOptionsSource = z.object({
 });
 export type ApiOptionsSource = z.infer<typeof ApiOptionsSource>;
 
+const MAX_FILE_SIZE_KB_CAP = 1536; // ~1.5MB raw; base64 transport inflates this ~33% — see main.ts's body-size limit
+
+/** Where a "hidden" field's value comes from: a page URL query param (e.g. utm_source), falling back to a fixed default. */
+export const HiddenFieldSource = z.object({
+  queryParam: z.string().max(64).optional(),
+  defaultValue: z.string().max(500).optional(),
+});
+export type HiddenFieldSource = z.infer<typeof HiddenFieldSource>;
+
 export const FormField = z
   .object({
     id: z.string().min(1),
@@ -83,11 +101,23 @@ export const FormField = z
         patternMessage: z.string().max(200).optional(),
       })
       .optional(),
+    /** type === "content": the static text/markdown-lite shown in place of an input. */
+    content: z.string().max(5000).optional(),
+    /** type === "file": accepted MIME types/extensions (comma-separated, e.g. "image/*,.pdf") and a size cap. */
+    fileAccept: z.string().max(200).optional(),
+    fileMaxSizeKb: z.number().int().positive().max(MAX_FILE_SIZE_KB_CAP).optional(),
+    /** type === "hidden": where the value comes from — never shown or asked. */
+    hiddenSource: HiddenFieldSource.optional(),
   })
   .refine(
-    (f) => !CHOICE_FIELD_TYPES.includes(f.type) || (f.options?.length ?? 0) > 0 || f.optionsSource,
+    (f) => !CHOICE_FIELD_TYPES.includes(f.type) && !MULTI_CHOICE_FIELD_TYPES.includes(f.type)
+      || (f.options?.length ?? 0) > 0 || f.optionsSource,
     { message: "choice fields need static options or an API options source", path: ["options"] },
-  );
+  )
+  .refine((f) => f.type !== "content" || !!f.content?.trim(), {
+    message: "a content block needs text to display",
+    path: ["content"],
+  });
 export type FormField = z.infer<typeof FormField>;
 
 export const FormStep = z.object({
@@ -203,6 +233,18 @@ function hasDynamicOptions(field: AnyFormField): boolean {
   return ("optionsSource" in field && !!field.optionsSource) || ("apiOptions" in field && !!field.apiOptions);
 }
 
+/** A data: URL, base64-transported (no multipart) — see FormRenderer's file input handling. */
+const FILE_DATA_URL_RE = /^data:([\w.+-]+\/[\w.+-]+);base64,(.*)$/s;
+
+function fileMimeAllowed(mime: string, accept: string | undefined): boolean {
+  if (!accept) return true;
+  return accept.split(",").map((s) => s.trim()).some((pattern) => {
+    if (pattern.startsWith(".")) return false; // extension patterns can't be checked from a MIME type alone
+    if (pattern.endsWith("/*")) return mime.startsWith(pattern.slice(0, -1));
+    return mime === pattern;
+  });
+}
+
 function validateValue(field: AnyFormField, raw: unknown): { ok: true; value: unknown } | { ok: false; error: string } {
   const v = field.validation;
   switch (field.type) {
@@ -210,6 +252,28 @@ function validateValue(field: AnyFormField, raw: unknown): { ok: true; value: un
       const checked = raw === true || raw === "true" || raw === "on";
       if (field.required && !checked) return { ok: false, error: "This must be checked" };
       return { ok: true, value: checked };
+    }
+    case "multiselect": {
+      // An empty selection never reaches here — validateFields' generic
+      // required-check (isEmpty treats a zero-length array as empty) already
+      // intercepts it with "This field is required".
+      const values = Array.isArray(raw) ? raw.map(String) : [];
+      if (!hasDynamicOptions(field)) {
+        const allowed = new Set((field.options ?? []).map((o) => o.value));
+        if (values.some((val) => !allowed.has(val))) return { ok: false, error: "Choose only from the listed options" };
+      }
+      return { ok: true, value: values };
+    }
+    case "file": {
+      if (typeof raw !== "string") return { ok: false, error: "Invalid file" };
+      const match = FILE_DATA_URL_RE.exec(raw);
+      if (!match) return { ok: false, error: "Invalid file upload" };
+      const [, mime, base64] = match;
+      const sizeKb = (base64!.length * 0.75) / 1024; // base64 inflates raw bytes by ~4/3
+      const cap = field.fileMaxSizeKb ?? MAX_FILE_SIZE_KB_CAP;
+      if (sizeKb > cap) return { ok: false, error: `File must be under ${cap} KB` };
+      if (!fileMimeAllowed(mime!, field.fileAccept)) return { ok: false, error: "File type not allowed" };
+      return { ok: true, value: raw };
     }
     case "number": {
       const n = typeof raw === "number" ? raw : Number(raw);
@@ -257,6 +321,7 @@ export function validateFields(fields: AnyFormField[], data: FormData) {
   const errors: Record<string, string> = {};
   const values: FormData = {};
   for (const field of fields) {
+    if (field.type === "content") continue; // display-only — never part of the submitted data
     const raw = data[field.key];
     if (isEmpty(raw) && field.type !== "checkbox") {
       if (field.required) errors[field.key] = "This field is required";

@@ -184,11 +184,51 @@ describe("billing lock/unlock + admin operator API (e2e)", () => {
     });
 
     it("lists tenants including ours, with subscription info", async () => {
-      const tenants = await fetch(`${baseUrl}/admin/tenants`, {
+      const { rows } = await fetch(`${baseUrl}/admin/tenants?take=200`, {
         headers: { Authorization: `Bearer ${adminToken}` },
-      }).then((r) => json<Array<{ id: string; subscription: { status: string } }>>(r));
-      const ours = tenants.find((t) => t.id === tenantId);
+      }).then((r) => json<{ rows: Array<{ id: string; subscription: { status: string } }> }>(r));
+      const ours = rows.find((t) => t.id === tenantId);
       expect(ours?.subscription.status).toBe("active");
+    });
+
+    it("paginates tenants with a cursor, no overlap between pages", async () => {
+      const page1 = await fetch(`${baseUrl}/admin/tenants?take=2`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      }).then((r) => json<{ rows: { id: string }[]; nextCursor?: string }>(r));
+      expect(page1.rows.length).toBeLessThanOrEqual(2);
+      if (!page1.nextCursor) return; // fewer than 2 tenants exist in this run — nothing more to paginate
+
+      const page2 = await fetch(`${baseUrl}/admin/tenants?take=2&cursor=${page1.nextCursor}`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      }).then((r) => json<{ rows: { id: string }[] }>(r));
+      const page1Ids = new Set(page1.rows.map((t) => t.id));
+      expect(page2.rows.every((t) => !page1Ids.has(t.id))).toBe(true);
+    });
+
+    it("stats reflect the whole table, not just one page — a new tenant moves the count by exactly one", async () => {
+      const before = await fetch(`${baseUrl}/admin/tenants/stats`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      }).then((r) => json<{ total: number; active: number; attention: number; mrrCents: number }>(r));
+
+      const suffix2 = Math.random().toString(36).slice(2, 8);
+      const extra = await fetch(`${baseUrl}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenantName: `Stats Test ${suffix2}`,
+          email: `stats-${suffix2}@test.dev`,
+          password: "hunter22",
+        }),
+      }).then((r) => json<{ user: { tenantId: string } }>(r));
+
+      const after = await fetch(`${baseUrl}/admin/tenants/stats`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      }).then((r) => json<{ total: number; active: number }>(r));
+
+      expect(after.total).toBe(before.total + 1);
+      expect(after.active).toBe(before.active + 1); // a fresh registration starts "active"
+
+      await prisma.tenant.deleteMany({ where: { id: extra.user.tenantId } });
     });
 
     it("pause/resume drives the same status field the billing engine uses", async () => {

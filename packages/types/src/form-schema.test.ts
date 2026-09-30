@@ -4,6 +4,7 @@ import {
   renderOptionsUrl,
   resolveVisibility,
   toPublicFormSchema,
+  validateFields,
   validateSubmission,
 } from "./form-schema.js";
 
@@ -90,5 +91,59 @@ describe("form schema", () => {
 
   it("renders dependent option urls with encoding", () => {
     expect(renderOptionsUrl("https://x.io/c?q={{a}}", { a: "a b&c" })).toBe("https://x.io/c?q=a%20b%26c");
+  });
+
+  it("content blocks need text, and never appear in submitted values", () => {
+    expect(FormSchema.safeParse({ steps: [{ id: "s", fields: [{ id: "c", key: "c", type: "content" }] }] }).success).toBe(
+      false,
+    );
+    const withContent = FormSchema.parse({
+      steps: [{ id: "s", fields: [{ id: "c", key: "c", type: "content", content: "Welcome!", label: "x" }] }],
+    });
+    const result = validateFields(withContent.steps[0]!.fields, {});
+    expect(result.valid).toBe(true);
+    expect(result.values).toEqual({});
+  });
+
+  it("multiselect: required means non-empty, and only listed values are accepted", () => {
+    const field = {
+      id: "m",
+      key: "interests",
+      type: "multiselect" as const,
+      label: "Interests",
+      required: true,
+      options: [
+        { label: "A", value: "a" },
+        { label: "B", value: "b" },
+      ],
+    };
+    expect(validateFields([field], {}).errors.interests).toBe("This field is required");
+    expect(validateFields([field], { interests: [] }).errors.interests).toBe("This field is required");
+    expect(validateFields([field], { interests: ["a", "b"] })).toMatchObject({ valid: true, values: { interests: ["a", "b"] } });
+    expect(validateFields([field], { interests: ["a", "nope"] }).errors.interests).toBe(
+      "Choose only from the listed options",
+    );
+  });
+
+  it("file: validates the data URL shape, size cap, and MIME allowlist", () => {
+    const png1x1 =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+    const field = { id: "f", key: "avatar", type: "file" as const, label: "Avatar", required: false, fileAccept: "image/*", fileMaxSizeKb: 100 };
+    expect(validateFields([field], { avatar: png1x1 })).toMatchObject({ valid: true });
+    expect(validateFields([field], { avatar: "not-a-data-url" }).errors.avatar).toBeDefined();
+    expect(
+      validateFields([{ ...field, fileAccept: "application/pdf" }], { avatar: png1x1 }).errors.avatar,
+    ).toBe("File type not allowed");
+    const big = "data:image/png;base64," + "A".repeat(200_000); // ~150KB decoded, over the 100KB cap
+    expect(validateFields([field], { avatar: big }).errors.avatar).toMatch(/under 100 KB/);
+  });
+
+  it("hidden: behaves as a plain passthrough string, required still enforced", () => {
+    const field = { id: "h", key: "utm_source", type: "hidden" as const, label: "UTM source", required: true };
+    expect(validateFields([field], {}).errors.utm_source).toBe("This field is required");
+    expect(validateFields([field], { utm_source: "newsletter" })).toMatchObject({
+      valid: true,
+      values: { utm_source: "newsletter" },
+    });
   });
 });

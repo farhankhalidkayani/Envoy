@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import type { AdminTenantDetail } from "@envoy/sdk";
 import type { FeatureKey } from "@envoy/types";
 import { FEATURE_KEYS } from "@envoy/types";
@@ -17,10 +17,13 @@ function centsLabel(cents: number): string {
 
 export default function TenantDetailPage() {
   const { showToast } = useToast();
+  const router = useRouter();
   const params = useParams<{ id: string }>();
   const [tenant, setTenant] = useState<AdminTenantDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [confirmName, setConfirmName] = useState("");
+  const [hardDeleting, setHardDeleting] = useState(false);
 
   const [baseMonthly, setBaseMonthly] = useState("");
   const [perConversation, setPerConversation] = useState("");
@@ -97,6 +100,20 @@ export default function TenantDetailPage() {
       setError(errorMessage(err));
     } finally {
       setBusyFeature(null);
+    }
+  }
+
+  async function hardDelete() {
+    if (!tenant) return;
+    setHardDeleting(true);
+    setError(null);
+    try {
+      await api.admin.hardDeleteTenant(params.id, confirmName);
+      showToast(`${tenant.name} permanently deleted.`);
+      router.push("/tenants");
+    } catch (err) {
+      setError(errorMessage(err));
+      setHardDeleting(false);
     }
   }
 
@@ -220,6 +237,31 @@ export default function TenantDetailPage() {
             </tbody>
           </table>
         )}
+      </div>
+
+      <div className="card" style={{ marginTop: 16, borderColor: "var(--stop)" }}>
+        <strong style={{ fontSize: 13.5, display: "block", marginBottom: 8 }}>Danger zone</strong>
+        <p style={{ color: "var(--ink-faint)", fontSize: 12.5, marginBottom: 12 }}>
+          Permanently deletes this tenant and everything in it — agents, conversations, forms and submissions,
+          CRM and integration connections, and all its users. This is irreversible and distinct from
+          &quot;Revoke&quot; on the tenants list, which only locks the account. Type <strong>{tenant.name}</strong>{" "}
+          to confirm.
+        </p>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            value={confirmName}
+            onChange={(e) => setConfirmName(e.target.value)}
+            placeholder={tenant.name}
+            aria-label="Type the tenant name to confirm permanent deletion"
+          />
+          <button
+            className="btn btn-danger"
+            disabled={hardDeleting || confirmName !== tenant.name}
+            onClick={hardDelete}
+          >
+            {hardDeleting ? "Deleting…" : "Permanently delete"}
+          </button>
+        </div>
       </div>
 
       <ConfirmDialog

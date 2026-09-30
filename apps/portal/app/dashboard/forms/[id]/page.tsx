@@ -294,12 +294,69 @@ const DESTINATIONS = ["webhook", "email", "calendar"] as const;
 function SubmissionsPane({ form, schema }: { form: Form; schema: FormSchema }) {
   const { showToast } = useToast();
   const [rows, setRows] = useState<FormSubmission[] | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [deleting, setDeleting] = useState<FormSubmission | null>(null);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState<string | null>(null);
   const load = useCallback(() => {
-    api.forms.submissions(form.id).then(setRows).catch((err) => setError(errorMessage(err)));
+    api.forms
+      .submissions(form.id)
+      .then((page) => {
+        setRows(page.rows);
+        setNextCursor(page.nextCursor);
+      })
+      .catch((err) => setError(errorMessage(err)));
   }, [form.id]);
   useEffect(load, [load]);
+
+  async function loadMore() {
+    if (!nextCursor) return;
+    setLoadingMore(true);
+    try {
+      const page = await api.forms.submissions(form.id, { cursor: nextCursor });
+      setRows((prev) => [...(prev ?? []), ...page.rows]);
+      setNextCursor(page.nextCursor);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  async function exportCsv() {
+    setExporting(true);
+    try {
+      const blob = await api.forms.exportSubmissionsCsv(form.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${form.name.replace(/[^\w-]+/g, "_") || "submissions"}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function remove() {
+    if (!deleting) return;
+    setBusy(true);
+    try {
+      await api.forms.deleteSubmission(form.id, deleting.id);
+      setRows((prev) => (prev ?? []).filter((r) => r.id !== deleting.id));
+      setDeleting(null);
+      showToast("Submission deleted.");
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const fields = schema.steps.flatMap((s) => s.fields);
   // Include keys from older submissions whose fields were since removed.
@@ -333,7 +390,13 @@ function SubmissionsPane({ form, schema }: { form: Form; schema: FormSchema }) {
   }
 
   return (
-    <div className="card fb-table-wrap">
+    <div>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+        <button className="btn" onClick={exportCsv} disabled={exporting}>
+          {exporting ? "Exporting…" : "Export CSV"}
+        </button>
+      </div>
+      <div className="card fb-table-wrap">
       <table>
         <thead>
           <tr>
@@ -342,6 +405,7 @@ function SubmissionsPane({ form, schema }: { form: Form; schema: FormSchema }) {
               <th key={c.key}>{c.label}</th>
             ))}
             <th>Delivered to</th>
+            <th aria-label="Actions" />
           </tr>
         </thead>
         <tbody>
@@ -378,11 +442,34 @@ function SubmissionsPane({ form, schema }: { form: Form; schema: FormSchema }) {
                     ),
                   )}
                 </td>
+                <td>
+                  <button className="eb-icon-btn" aria-label="Delete submission" onClick={() => setDeleting(row)}>
+                    🗑
+                  </button>
+                </td>
               </tr>
             );
           })}
         </tbody>
       </table>
+      </div>
+      {nextCursor && (
+        <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
+          <button className="btn" onClick={loadMore} disabled={loadingMore}>
+            {loadingMore ? "Loading…" : "Load more"}
+          </button>
+        </div>
+      )}
+      <ConfirmDialog
+        open={!!deleting}
+        title="Delete this submission?"
+        description="This permanently removes the submission and its captured data. This can't be undone."
+        confirmLabel="Delete"
+        danger
+        busy={busy}
+        onConfirm={remove}
+        onCancel={() => setDeleting(null)}
+      />
     </div>
   );
 }

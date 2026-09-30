@@ -35,13 +35,28 @@ export class PipelineProcessor implements OnModuleInit, OnModuleDestroy {
       (job) => this.process(job),
       { connection: createPipelineRedisConnection() },
     );
-    this.worker.on("failed", (job, err) => {
-      this.logger.error(`summary job ${job?.id} failed: ${err.message}`);
-    });
+    this.worker.on("failed", (job, err) => this.handleFailure(job, err));
   }
 
   async onModuleDestroy() {
     await this.worker?.close();
+  }
+
+  /**
+   * BullMQ fires "failed" on every attempt, not just the last — only
+   * persist once retries are actually exhausted, so a mid-retry error
+   * doesn't get mistaken for a permanently missing summary. Exported as its
+   * own method so the exhaustion logic is testable without waiting out
+   * real BullMQ backoff delays.
+   */
+  async handleFailure(job: Job<SummaryJobData> | undefined, err: Error): Promise<void> {
+    this.logger.error(`summary job ${job?.id} failed: ${err.message}`);
+    if (!job || job.attemptsMade < (job.opts.attempts ?? 1)) return;
+    await this.prisma.client.conversation
+      .update({ where: { id: job.data.conversationId }, data: { aiSummaryError: err.message.slice(0, 500) } })
+      .catch(() => {
+        // The conversation may have been deleted since the job was queued — nothing to persist to.
+      });
   }
 
   private async process(job: Job<SummaryJobData>): Promise<void> {
@@ -59,7 +74,7 @@ export class PipelineProcessor implements OnModuleInit, OnModuleDestroy {
 
     await this.prisma.client.conversation.update({
       where: { id: conversationId },
-      data: { transcriptText, aiSummary },
+      data: { transcriptText, aiSummary, aiSummaryError: null },
     });
   }
 }

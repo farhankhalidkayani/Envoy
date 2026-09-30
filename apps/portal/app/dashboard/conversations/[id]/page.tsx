@@ -166,6 +166,14 @@ export default function ConversationDetailPage() {
           <p style={{ fontSize: 13 }}>{conversation.aiSummary}</p>
         </div>
       )}
+      {!conversation.aiSummary && conversation.aiSummaryError && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <strong style={{ fontSize: 13.5, display: "block", marginBottom: 8 }}>AI summary</strong>
+          <p style={{ fontSize: 12.5, color: "var(--stop)" }}>
+            Summary generation failed and won&apos;t be retried automatically: {conversation.aiSummaryError}
+          </p>
+        </div>
+      )}
 
       <div className="card">
         <strong style={{ fontSize: 13.5, display: "block", marginBottom: 8 }}>Transcript</strong>

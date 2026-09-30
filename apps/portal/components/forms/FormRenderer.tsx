@@ -34,6 +34,7 @@ export function FormRenderer({ schema, loadOptions, onSubmit, accent }: Props) {
   const [formError, setFormError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [apiOptions, setApiOptions] = useState<Record<string, OptionsState>>({});
+  const [hp, setHp] = useState(""); // honeypot — see the hidden "_hp" field below
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   const visibility = useMemo(() => resolveVisibility(schema, values), [schema, values]);
@@ -45,6 +46,24 @@ export function FormRenderer({ schema, loadOptions, onSubmit, accent }: Props) {
   const step = steps[index];
   const fields = step?.fields.filter((f) => visibility.visibleFieldIds.has(f.id)) ?? [];
   const isLast = index >= steps.length - 1;
+
+  // "hidden" fields never render — capture their value from the URL (or default) once, up front.
+  useEffect(() => {
+    const hiddenFields = schema.steps.flatMap((s) => s.fields).filter((f) => f.type === "hidden");
+    if (!hiddenFields.length) return;
+    const params = new URLSearchParams(window.location.search);
+    setValues((prev) => {
+      const next = { ...prev };
+      for (const f of hiddenFields) {
+        if (next[f.key] !== undefined) continue;
+        const fromUrl = f.hiddenSource?.queryParam ? params.get(f.hiddenSource.queryParam) : null;
+        const val = fromUrl ?? f.hiddenSource?.defaultValue;
+        if (val !== undefined && val !== null) next[f.key] = val;
+      }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // API-sourced dropdowns: (re)load whenever the answers they depend on change.
   const apiFields = fields.filter((f) => f.apiOptions);
@@ -111,7 +130,7 @@ export function FormRenderer({ schema, loadOptions, onSubmit, accent }: Props) {
 
     setSubmitting(true);
     setFormError(null);
-    const outcome = await onSubmit(visibility.data);
+    const outcome = await onSubmit({ ...visibility.data, _hp: hp });
     setSubmitting(false);
     if (outcome.ok) {
       setDone(outcome.successMessage);
@@ -162,17 +181,33 @@ export function FormRenderer({ schema, loadOptions, onSubmit, accent }: Props) {
         )}
       </div>
 
-      {fields.map((field) => (
-        <FieldInput
-          key={field.id}
-          field={field}
-          value={values[field.key]}
-          error={errors[field.key]}
-          options={field.apiOptions ? apiOptions[field.key] : { status: "ready", options: field.options ?? [] }}
-          waitingOn={field.apiOptions?.dependsOn.filter((k) => values[k] === undefined || values[k] === "") ?? []}
-          onChange={(v) => setValue(field.key, v)}
-        />
-      ))}
+      {fields
+        .filter((f) => f.type !== "hidden")
+        .map((field) =>
+          field.type === "content" ? (
+            <div key={field.id} className="ef-content">{field.content}</div>
+          ) : (
+            <FieldInput
+              key={field.id}
+              field={field}
+              value={values[field.key]}
+              error={errors[field.key]}
+              options={field.apiOptions ? apiOptions[field.key] : { status: "ready", options: field.options ?? [] }}
+              waitingOn={field.apiOptions?.dependsOn.filter((k) => values[k] === undefined || values[k] === "") ?? []}
+              onChange={(v) => setValue(field.key, v)}
+            />
+          ),
+        )}
+
+      {/* Honeypot: invisible to real visitors, irresistible to form-filling bots. A
+          non-empty value here means a bot filled it — the server silently accepts the
+          submission and drops it without creating a row or routing anywhere. */}
+      <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", width: 1, height: 1, overflow: "hidden" }}>
+        <label>
+          Leave this field blank
+          <input type="text" name="_hp" tabIndex={-1} autoComplete="off" value={hp} onChange={(e) => setHp(e.target.value)} />
+        </label>
+      </div>
 
       {formError && (
         <div className="ef-form-error" role="alert">
@@ -240,8 +275,10 @@ function FieldInput({
         </div>
       );
     case "select":
-    case "radio": {
+    case "radio":
+    case "multiselect": {
       const state = options ?? { status: "loading" as const };
+      const selected = Array.isArray(value) ? value.map(String) : [];
       if (waitingOn.length) {
         control = <div className="ef-muted ef-placeholder">Answer the question{waitingOn.length > 1 ? "s" : ""} above first.</div>;
       } else if (state.status === "loading") {
@@ -260,6 +297,7 @@ function FieldInput({
           </select>
         );
       } else {
+        const isMulti = field.type === "multiselect";
         return (
           <fieldset className="ef-field ef-fieldset" aria-describedby={describedBy} aria-invalid={error ? true : undefined}>
             <legend className="ef-label">
@@ -269,12 +307,18 @@ function FieldInput({
             {state.options.map((o, i) => (
               <label key={o.value} className="ef-check">
                 <input
-                  type="radio"
+                  type={isMulti ? "checkbox" : "radio"}
                   id={i === 0 ? id : undefined}
                   name={field.key}
                   value={o.value}
-                  checked={str === o.value}
-                  onChange={() => onChange(o.value)}
+                  checked={isMulti ? selected.includes(o.value) : str === o.value}
+                  onChange={() =>
+                    isMulti
+                      ? onChange(
+                          selected.includes(o.value) ? selected.filter((v) => v !== o.value) : [...selected, o.value],
+                        )
+                      : onChange(o.value)
+                  }
                 />
                 <span>{o.label}</span>
               </label>
@@ -284,6 +328,23 @@ function FieldInput({
           </fieldset>
         );
       }
+      break;
+    }
+    case "file": {
+      control = (
+        <input
+          {...common}
+          type="file"
+          accept={field.fileAccept}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (!f) return onChange(undefined);
+            const reader = new FileReader();
+            reader.onload = () => onChange(reader.result);
+            reader.readAsDataURL(f);
+          }}
+        />
+      );
       break;
     }
     default: {

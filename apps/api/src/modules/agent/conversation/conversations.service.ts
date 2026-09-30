@@ -21,12 +21,27 @@ export class ConversationsService {
   }
 
   /** For the portal's conversation dashboard — see build plan §Frontend structure. */
-  async findAllForTenant(tenantId: string, agentId?: string) {
-    return this.prisma.client.conversation.findMany({
+  async findAllForTenant(tenantId: string, agentId?: string, opts: { cursor?: string; take?: number } = {}) {
+    const take = Math.min(Math.max(opts.take ?? 50, 1), 200);
+    const rows = await this.prisma.client.conversation.findMany({
       where: { tenantId, ...(agentId ? { agentId } : {}) },
       orderBy: { createdAt: "desc" },
+      take: take + 1,
+      ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
       include: { agent: { select: { name: true } } },
     });
+    const nextCursor = rows.length > take ? rows[take - 1]!.id : undefined;
+    return { rows: rows.slice(0, take), nextCursor };
+  }
+
+  /** Dashboard stat cards need whole-tenant counts, not just whatever page is loaded. */
+  async getStats(tenantId: string, agentId?: string) {
+    const where = { tenantId, ...(agentId ? { agentId } : {}) };
+    const [total, completed] = await Promise.all([
+      this.prisma.client.conversation.count({ where }),
+      this.prisma.client.conversation.count({ where: { ...where, status: "completed" } }),
+    ]);
+    return { total, completed };
   }
 
   async findOneForTenant(tenantId: string, id: string) {

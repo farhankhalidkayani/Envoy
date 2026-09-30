@@ -4,10 +4,11 @@ import { useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "../../lib/auth";
-import { BuildingIcon, ClockListIcon, LogoMark } from "../../components/icons";
+import { BuildingIcon, ClockListIcon, AlertIcon, LogoMark } from "../../components/icons";
 
 const NAV = [
   { href: "/tenants", label: "Tenants", icon: BuildingIcon },
+  { href: "/jobs", label: "Failed Jobs", icon: AlertIcon },
   { href: "/audit-log", label: "Audit Log", icon: ClockListIcon },
 ];
 

@@ -1,5 +1,6 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import type { Server as HttpServer } from "node:http";
 import { AppModule } from "./app.module.js";
 import { AgentGateway } from "./modules/agent/gateway/agent.gateway.js";
@@ -8,7 +9,11 @@ async function bootstrap() {
   // rawBody: true — required for Stripe webhook signature verification
   // (stripe.webhooks.constructEvent needs the exact bytes, not the
   // JSON-parsed body). Nest populates req.rawBody alongside normal parsing.
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
+  // Default express body limit (100kb) is too small for a form's "file"
+  // field, which transports the upload as a base64 data URL inside the JSON
+  // body — see FormField.fileMaxSizeKb (capped at 1.5MB raw, ~2MB base64).
+  app.useBodyParser("json", { limit: "3mb" });
   // The portal/admin origins may send credentials (the refresh cookie). Every
   // other origin — the widget and public forms are embedded on customer
   // sites — still gets CORS, but never credentials, so a third-party page

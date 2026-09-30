@@ -3,6 +3,7 @@ import type { Prisma } from "@envoy/db";
 import { PrismaService } from "../core/prisma/prisma.service.js";
 import { RedisService } from "../core/redis/redis.service.js";
 import { consumeOAuthState, issueOAuthState } from "../core/common/oauth-state.js";
+import { sanitizeCapturedData } from "../core/common/sanitize-captured-data.js";
 import { CRM_PROVIDER } from "./providers/crm-provider.module.js";
 import type { CrmProvider, CrmPushResult } from "./providers/types.js";
 import { decryptToken, encryptToken } from "./token-crypto.js";
@@ -126,7 +127,7 @@ export class CrmService {
 
     const fieldMapping = (connection.fieldMapping as Record<string, string>) ?? {};
     const mappedRecord: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(capturedData)) {
+    for (const [key, value] of Object.entries(sanitizeCapturedData(capturedData))) {
       mappedRecord[fieldMapping[key] ?? key] = value;
     }
 

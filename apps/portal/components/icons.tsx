@@ -93,6 +93,26 @@ export function FormIcon({ size = 18 }: IconProps) {
   );
 }
 
+export function UsersIcon({ size = 18 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...base}>
+      <circle cx="9" cy="8" r="3" />
+      <path d="M3.5 20c0-3.6 2.5-6 5.5-6s5.5 2.4 5.5 6" />
+      <circle cx="17" cy="9" r="2.4" />
+      <path d="M14.5 14.3c2.4.3 4.5 2.4 4.5 5.7" />
+    </svg>
+  );
+}
+
+export function SettingsIcon({ size = 18 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...base}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 3v2.2M12 18.8V21M21 12h-2.2M5.2 12H3M18.4 5.6l-1.5 1.5M7.1 16.9l-1.5 1.5M18.4 18.4l-1.5-1.5M7.1 7.1 5.6 5.6" />
+    </svg>
+  );
+}
+
 export function LogoMark({ size = 15 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">

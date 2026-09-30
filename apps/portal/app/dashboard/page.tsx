@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import type { Agent, Conversation } from "@envoy/sdk";
+import type { Agent } from "@envoy/sdk";
 import { api } from "../../lib/api";
 import { errorMessage } from "../../lib/errors";
-import { BotIcon, PulseIcon, ChatIcon, CheckCircleIcon } from "../../components/icons";
+import { BotIcon, PulseIcon, ChatIcon, CheckCircleIcon, UsersIcon } from "../../components/icons";
 
 const STATUS_PILL: Record<Agent["status"], string> = {
   draft: "pill-gray",
@@ -15,18 +15,20 @@ const STATUS_PILL: Record<Agent["status"], string> = {
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[] | null>(null);
-  const [conversations, setConversations] = useState<Conversation[] | null>(null);
+  const [convStats, setConvStats] = useState<{ total: number; completed: number } | null>(null);
+  const [leadStats, setLeadStats] = useState<{ totalSubmissions: number; totalLeadConversations: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     api.agents.list().then(setAgents).catch((err) => setError(errorMessage(err)));
-    api.conversations.list().then(setConversations).catch(() => {});
+    api.conversations.getStats().then(setConvStats).catch(() => {});
+    api.leads.getStats().then(setLeadStats).catch(() => {});
   }, []);
 
   const liveAgents = agents?.filter((a) => a.status === "live").length ?? 0;
-  const totalConversations = conversations?.length ?? 0;
-  const completed = conversations?.filter((c) => c.status === "completed").length ?? 0;
-  const completionRate = totalConversations > 0 ? Math.round((completed / totalConversations) * 100) : null;
+  const totalConversations = convStats?.total ?? 0;
+  const completionRate = convStats && convStats.total > 0 ? Math.round((convStats.completed / convStats.total) * 100) : null;
+  const totalLeads = leadStats ? leadStats.totalLeadConversations + leadStats.totalSubmissions : null;
 
   return (
     <div>
@@ -76,6 +78,15 @@ export default function AgentsPage() {
             </div>
             <div className="stat-card-value">{completionRate !== null ? `${completionRate}%` : "—"}</div>
             <div className="stat-card-label">Completion rate</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-top">
+              <span className="stat-card-icon">
+                <UsersIcon size={16} />
+              </span>
+            </div>
+            <div className="stat-card-value">{totalLeads ?? "—"}</div>
+            <div className="stat-card-label">Total leads</div>
           </div>
         </div>
       )}

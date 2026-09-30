@@ -23,15 +23,39 @@ const STATUS_PILL: Record<AdminTenant["subscriptionStatus"], string> = {
 export default function TenantsPage() {
   const { showToast } = useToast();
   const [tenants, setTenants] = useState<AdminTenant[] | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [stats, setStats] = useState<{ total: number; active: number; attention: number; mrrCents: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingAction | null>(null);
 
   function load() {
-    api.admin.listTenants().then(setTenants).catch((err) => setError(errorMessage(err)));
+    api.admin
+      .listTenants()
+      .then((page) => {
+        setTenants(page.rows);
+        setNextCursor(page.nextCursor);
+      })
+      .catch((err) => setError(errorMessage(err)));
+    api.admin.getTenantStats().then(setStats).catch(() => {});
   }
 
   useEffect(load, []);
+
+  async function loadMore() {
+    if (!nextCursor) return;
+    setLoadingMore(true);
+    try {
+      const page = await api.admin.listTenants({ cursor: nextCursor });
+      setTenants((prev) => [...(prev ?? []), ...page.rows]);
+      setNextCursor(page.nextCursor);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   async function withBusy(id: string, action: () => Promise<void>, successMessage?: string) {
     setBusyId(id);
@@ -58,20 +82,12 @@ export default function TenantsPage() {
     }
   }
 
-  const activeCount = tenants?.filter((t) => t.subscriptionStatus === "active").length ?? 0;
-  const attentionCount =
-    tenants?.filter((t) => t.subscriptionStatus === "past_due" || t.subscriptionStatus === "locked").length ?? 0;
-  const mrrCents =
-    tenants
-      ?.filter((t) => t.subscriptionStatus === "active" || t.subscriptionStatus === "past_due")
-      .reduce((sum, t) => sum + (t.subscription?.monthlyRate ?? 0), 0) ?? 0;
-
   return (
     <div>
       <h1 className="page-title">Tenants</h1>
       {error && <div className="error-banner">{error}</div>}
 
-      {tenants && (
+      {stats && (
         <div className="stat-grid">
           <div className="stat-card">
             <div className="stat-card-top">
@@ -79,7 +95,7 @@ export default function TenantsPage() {
                 <BuildingIcon size={16} />
               </span>
             </div>
-            <div className="stat-card-value">{tenants.length}</div>
+            <div className="stat-card-value">{stats.total}</div>
             <div className="stat-card-label">Total tenants</div>
           </div>
           <div className="stat-card">
@@ -88,7 +104,7 @@ export default function TenantsPage() {
                 <CheckCircleIcon size={16} />
               </span>
             </div>
-            <div className="stat-card-value">{activeCount}</div>
+            <div className="stat-card-value">{stats.active}</div>
             <div className="stat-card-label">Active</div>
           </div>
           <div className="stat-card">
@@ -97,7 +113,7 @@ export default function TenantsPage() {
                 <AlertIcon size={16} />
               </span>
             </div>
-            <div className="stat-card-value">{attentionCount}</div>
+            <div className="stat-card-value">{stats.attention}</div>
             <div className="stat-card-label">Needs attention</div>
           </div>
           <div className="stat-card">
@@ -106,7 +122,7 @@ export default function TenantsPage() {
                 <DollarIcon size={16} />
               </span>
             </div>
-            <div className="stat-card-value">${(mrrCents / 100).toLocaleString()}</div>
+            <div className="stat-card-value">${(stats.mrrCents / 100).toLocaleString()}</div>
             <div className="stat-card-label">Monthly recurring</div>
           </div>
         </div>
@@ -206,6 +222,13 @@ export default function TenantsPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+      {nextCursor && (
+        <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
+          <button className="btn" onClick={loadMore} disabled={loadingMore}>
+            {loadingMore ? "Loading…" : "Load more"}
+          </button>
         </div>
       )}
 

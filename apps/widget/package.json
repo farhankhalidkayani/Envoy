@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@envoy/types": "workspace:*",
@@ -15,7 +16,10 @@
   "devDependencies": {
     "@envoy/config": "workspace:*",
     "@preact/preset-vite": "^2.9.0",
+    "@testing-library/preact": "^3.2.4",
+    "happy-dom": "^15.11.7",
     "typescript": "^5.7.0",
-    "vite": "^5.4.0"
+    "vite": "^5.4.0",
+    "vitest": "^2.1.9"
   }
 }

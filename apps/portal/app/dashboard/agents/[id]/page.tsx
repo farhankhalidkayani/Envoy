@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import type { Agent } from "@envoy/sdk";
@@ -38,16 +38,21 @@ export default function AgentDetailPage() {
   const [leadFormId, setLeadFormId] = useState<string | null>(null);
   const [forms, setForms] = useState<Form[]>([]);
 
+  // Persists across React StrictMode's dev-only double-invoke of this effect
+  // (mount → cleanup → mount) — a ref, unlike a local `cancelled` flag, is
+  // shared by both invocations, so this guarantees exactly one fetch and one
+  // application of its result no matter how many times the effect body
+  // itself runs. Without it, a second fetch's result can land after the
+  // user has already started editing and silently overwrite their changes.
+  const fetchedRef = useRef<string | null>(null);
+
   useEffect(() => {
-    // Guards against React StrictMode's double-invoke (and any real remount):
-    // without this, a second in-flight fetch resolving after the user has
-    // already started editing would silently overwrite their in-progress
-    // changes with the original server data.
-    let cancelled = false;
+    if (fetchedRef.current === params.id) return;
+    fetchedRef.current = params.id;
+
     api.agents
       .get(params.id)
       .then((a) => {
-        if (cancelled) return;
         setAgent(a);
         setName(a.name);
         setScript(a.script);
@@ -66,20 +71,10 @@ export default function AgentDetailPage() {
         setWidgetConfig(a.widgetConfig);
         setLeadFormId(a.leadFormId);
       })
-      .catch((err) => {
-        if (!cancelled) setError(errorMessage(err));
-      });
+      .catch((err) => setError(errorMessage(err)));
     // Forms failing to load shouldn't block the rest of the page — the
     // lead-form selector just falls back to "no forms available" (empty list).
-    api.forms
-      .list()
-      .then((f) => {
-        if (!cancelled) setForms(f);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
+    api.forms.list().then(setForms).catch(() => {});
   }, [params.id]);
 
   async function toggleLive() {

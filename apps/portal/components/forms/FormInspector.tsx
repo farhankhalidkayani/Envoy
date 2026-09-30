@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import {
-  CHOICE_FIELD_TYPES,
   optionsUrlDependencies,
   type ApiOptionsSource,
   type ConditionOp,
@@ -75,16 +74,26 @@ export function FieldInspector({
   function setType(type: FormFieldType) {
     onChange((f) => {
       const next: FormField = { ...f, type };
-      if (CHOICE_FIELD_TYPES.includes(type) && !f.options?.length && !f.optionsSource) {
+      if (isChoice(type) && !f.options?.length && !f.optionsSource) {
         next.options = [optionFromLabel("Option 1")];
       }
-      if (!CHOICE_FIELD_TYPES.includes(type)) {
+      if (!isChoice(type)) {
         delete next.options;
         delete next.optionsSource;
+      }
+      if (type === "content" && !f.content) next.content = "Add your text here.";
+      if (type !== "content") delete next.content;
+      if (type === "hidden" && !f.hiddenSource) next.hiddenSource = { queryParam: "utm_source" };
+      if (type !== "hidden") delete next.hiddenSource;
+      if (type !== "file") {
+        delete next.fileAccept;
+        delete next.fileMaxSizeKb;
       }
       return next;
     });
   }
+
+  const isPlainInput = !["checkbox", "radio", "multiselect", "content", "file", "hidden"].includes(field.type);
 
   return (
     <div className="fi">
@@ -105,19 +114,65 @@ export function FieldInspector({
             ))}
           </select>
         </Row>
-        {field.type !== "checkbox" && field.type !== "radio" && (
+        {(isPlainInput || field.type === "file") && (
           <Row label="Placeholder">
             <input value={field.placeholder ?? ""} onChange={(e) => set({ placeholder: e.target.value || undefined })} />
           </Row>
         )}
-        <Row label="Help text">
-          <input value={field.helpText ?? ""} onChange={(e) => set({ helpText: e.target.value || undefined })} />
-        </Row>
-        <label className="fi-toggle">
-          <input type="checkbox" checked={field.required} onChange={(e) => set({ required: e.target.checked })} />
-          <span>{field.type === "checkbox" ? "Must be checked" : "Required"}</span>
-        </label>
+        {field.type !== "content" && field.type !== "hidden" && (
+          <Row label="Help text">
+            <input value={field.helpText ?? ""} onChange={(e) => set({ helpText: e.target.value || undefined })} />
+          </Row>
+        )}
+        {field.type !== "content" && (
+          <label className="fi-toggle">
+            <input type="checkbox" checked={field.required} onChange={(e) => set({ required: e.target.checked })} />
+            <span>{field.type === "checkbox" ? "Must be checked" : "Required"}</span>
+          </label>
+        )}
       </Section>
+
+      {field.type === "content" && (
+        <Section title="Content">
+          <Row label="Text" hint="Shown as a heading/paragraph in place of an input — supports plain text only.">
+            <textarea rows={4} value={field.content ?? ""} onChange={(e) => set({ content: e.target.value })} />
+          </Row>
+        </Section>
+      )}
+
+      {field.type === "file" && (
+        <Section title="File">
+          <Row label="Accepted types" hint='e.g. "image/*,.pdf" — comma-separated MIME types or extensions.'>
+            <input value={field.fileAccept ?? ""} onChange={(e) => set({ fileAccept: e.target.value || undefined })} />
+          </Row>
+          <Row label="Max size (KB)" hint="Up to 1536 KB (~1.5MB).">
+            <input
+              type="number"
+              min={1}
+              max={1536}
+              value={field.fileMaxSizeKb ?? ""}
+              onChange={(e) => set({ fileMaxSizeKb: numOrUndef(e.target.value) })}
+            />
+          </Row>
+        </Section>
+      )}
+
+      {field.type === "hidden" && (
+        <Section title="Value source">
+          <Row label="URL query parameter" hint="e.g. utm_source — read from the page's URL when the form loads.">
+            <input
+              value={field.hiddenSource?.queryParam ?? ""}
+              onChange={(e) => set({ hiddenSource: { ...field.hiddenSource, queryParam: e.target.value || undefined } })}
+            />
+          </Row>
+          <Row label="Default value" hint="Used when the query parameter isn't present.">
+            <input
+              value={field.hiddenSource?.defaultValue ?? ""}
+              onChange={(e) => set({ hiddenSource: { ...field.hiddenSource, defaultValue: e.target.value || undefined } })}
+            />
+          </Row>
+        </Section>
+      )}
 
       {choice && (
         <Section title="Options">
