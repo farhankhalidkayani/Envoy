@@ -56,6 +56,21 @@ export class AdminService {
         subscription: true,
         users: { select: { id: true, email: true, role: true, featureAccess: true } },
         _count: { select: { agents: true, users: true, conversations: true } },
+        crmConnections: { select: { provider: true, createdAt: true, updatedAt: true } },
+        integrations: {
+          select: { id: true, type: true, enabled: true, createdAt: true, updatedAt: true },
+          orderBy: { type: "asc" },
+        },
+        forms: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            updatedAt: true,
+            _count: { select: { submissions: true } },
+          },
+          orderBy: { updatedAt: "desc" },
+        },
       },
     });
     if (!tenant) throw new NotFoundException("Tenant not found");
@@ -137,7 +152,7 @@ export class AdminService {
       where: tenantId ? { tenantId } : undefined,
       orderBy: { createdAt: "desc" },
       take: 200,
-      include: { adminUser: { select: { email: true } } },
+      include: { adminUser: { select: { email: true, role: true } } },
     });
   }
 

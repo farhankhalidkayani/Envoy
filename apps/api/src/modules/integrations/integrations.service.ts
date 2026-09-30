@@ -4,6 +4,7 @@ import { PrismaService } from "../core/prisma/prisma.service.js";
 import { RedisService } from "../core/redis/redis.service.js";
 import { consumeOAuthState, issueOAuthState } from "../core/common/oauth-state.js";
 import { sanitizeCapturedData } from "../core/common/sanitize-captured-data.js";
+import { AuditService } from "../core/audit/audit.service.js";
 import { decryptToken, encryptToken } from "../crm/token-crypto.js";
 import { NEVER_EXPIRES, packTokens, refreshIfExpiring, tokensFromGrant, unpackTokens } from "../core/common/oauth-tokens.js";
 import { CalendarSender } from "./senders/calendar.sender.js";
@@ -22,6 +23,7 @@ export class IntegrationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
+    private readonly audit: AuditService,
     private readonly webhookSender: WebhookSender,
     private readonly emailSender: EmailSender,
     private readonly calendarSender: CalendarSender,
@@ -36,25 +38,29 @@ export class IntegrationsService {
   }
 
   /** Webhook needs no OAuth — the config (URL, headers, payload template) IS the connection. */
-  async connectWebhook(tenantId: string, config: WebhookConfig) {
-    return this.prisma.client.integration.upsert({
+  async connectWebhook(tenantId: string, actorUserId: string, config: WebhookConfig) {
+    const integration = await this.prisma.client.integration.upsert({
       where: { tenantId_type: { tenantId, type: "webhook" } },
       create: { tenantId, type: "webhook", config: config as unknown as Prisma.InputJsonValue },
       update: { config: config as unknown as Prisma.InputJsonValue, enabled: true },
     });
+    await this.audit.log(actorUserId, tenantId, "integration.webhook.connected", { url: config.url });
+    return integration;
   }
 
   /** Email needs no per-tenant OAuth either — outbound via the app's own Resend account. */
-  async connectEmail(tenantId: string, config: EmailConfig) {
-    return this.prisma.client.integration.upsert({
+  async connectEmail(tenantId: string, actorUserId: string, config: EmailConfig) {
+    const integration = await this.prisma.client.integration.upsert({
       where: { tenantId_type: { tenantId, type: "email" } },
       create: { tenantId, type: "email", config: config as unknown as Prisma.InputJsonValue },
       update: { config: config as unknown as Prisma.InputJsonValue, enabled: true },
     });
+    await this.audit.log(actorUserId, tenantId, "integration.email.connected", { to: config.to });
+    return integration;
   }
 
   /** Mirrors CrmService.initiateConnect — mock mode when GOOGLE_CLIENT_ID isn't configured. */
-  async initiateCalendarConnect(tenantId: string): Promise<{ mode: "mock" | "oauth"; authorizeUrl?: string }> {
+  async initiateCalendarConnect(tenantId: string, actorUserId: string): Promise<{ mode: "mock" | "oauth"; authorizeUrl?: string }> {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     if (!clientId) {
       // Mock tokens never expire — there's no live Google account behind them to refresh against.
@@ -70,6 +76,7 @@ export class IntegrationsService {
         update: { oauthTokens: encryptToken(mockTokens), enabled: true },
       });
       this.logger.warn(`GOOGLE_CLIENT_ID not set — connected tenant ${tenantId} calendar in mock mode`);
+      await this.audit.log(actorUserId, tenantId, "integration.calendar.connected", { mode: "mock" });
       return { mode: "mock" };
     }
 
@@ -163,12 +170,13 @@ export class IntegrationsService {
     });
   }
 
-  async disconnect(tenantId: string, type: IntegrationType) {
+  async disconnect(tenantId: string, actorUserId: string, type: IntegrationType) {
     await this.prisma.client.integration
       .delete({ where: { tenantId_type: { tenantId, type } } })
       .catch(() => {
         // Already disconnected — deleting a nonexistent connection is a no-op, not an error.
       });
+    await this.audit.log(actorUserId, tenantId, `integration.${type}.disconnected`);
   }
 
   /** Backs the portal's manual "re-push" buttons — resolves the integration by tenant+type first. */

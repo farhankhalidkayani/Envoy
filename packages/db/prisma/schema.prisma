@@ -50,7 +50,6 @@ enum OutcomeType {
 
 enum CrmProvider {
   hubspot
-  zoho
 }
 
 enum IntegrationType {

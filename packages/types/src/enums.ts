@@ -18,5 +18,5 @@ export type ConversationStatus = z.infer<typeof ConversationStatus>;
 export const OutcomeType = z.enum(["demo_booking", "order", "complaint", "appointment"]);
 export type OutcomeType = z.infer<typeof OutcomeType>;
 
-export const CrmProvider = z.enum(["hubspot", "zoho"]);
+export const CrmProvider = z.enum(["hubspot"]);
 export type CrmProvider = z.infer<typeof CrmProvider>;

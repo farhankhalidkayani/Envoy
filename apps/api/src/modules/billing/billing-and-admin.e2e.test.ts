@@ -191,6 +191,21 @@ describe("billing lock/unlock + admin operator API (e2e)", () => {
       expect(ours?.subscription.status).toBe("active");
     });
 
+    it("tenant detail includes forms, integrations and CRM connections", async () => {
+      const detail = await fetch(`${baseUrl}/admin/tenants/${tenantId}`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      }).then((r) =>
+        json<{
+          forms: unknown[];
+          integrations: unknown[];
+          crmConnections: unknown[];
+        }>(r),
+      );
+      expect(Array.isArray(detail.forms)).toBe(true);
+      expect(Array.isArray(detail.integrations)).toBe(true);
+      expect(Array.isArray(detail.crmConnections)).toBe(true);
+    });
+
     it("paginates tenants with a cursor, no overlap between pages", async () => {
       const page1 = await fetch(`${baseUrl}/admin/tenants?take=2`, {
         headers: { Authorization: `Bearer ${adminToken}` },

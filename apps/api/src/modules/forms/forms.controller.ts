@@ -58,12 +58,12 @@ export class FormsController {
     @Param("id") id: string,
     @Body(new ZodValidationPipe(UpdateFormDto)) body: z.infer<typeof UpdateFormDto>,
   ) {
-    return this.forms.update(user.tenantId!, id, body);
+    return this.forms.update(user.tenantId!, id, user.sub, body);
   }
 
   @Delete(":id")
   remove(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
-    return this.forms.remove(user.tenantId!, id);
+    return this.forms.remove(user.tenantId!, id, user.sub);
   }
 
   // Declared before ":id/submissions" so "export" is never read as a submission cursor's neighbor.

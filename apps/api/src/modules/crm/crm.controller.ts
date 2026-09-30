@@ -29,7 +29,7 @@ export class CrmController {
   @UseGuards(JwtAuthGuard, TenantScopeGuard, TenantLockGuard, FeatureGuard)
   @RequireFeature("crm")
   connect(@CurrentUser() user: JwtPayload) {
-    return this.crm.initiateConnect(user.tenantId!);
+    return this.crm.initiateConnect(user.tenantId!, user.sub);
   }
 
   @Patch("mapping")
@@ -46,7 +46,7 @@ export class CrmController {
   @UseGuards(JwtAuthGuard, TenantScopeGuard, TenantLockGuard, FeatureGuard)
   @RequireFeature("crm")
   disconnect(@CurrentUser() user: JwtPayload) {
-    return this.crm.disconnect(user.tenantId!);
+    return this.crm.disconnect(user.tenantId!, user.sub);
   }
 
   @Post("push/:conversationId")

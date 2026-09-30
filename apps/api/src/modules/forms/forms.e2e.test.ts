@@ -21,6 +21,7 @@ describe("form submission (e2e)", () => {
   let baseUrl: string;
   let token: string;
   let tenantId: string;
+  let ownerUserId: string;
   let publicToken: string;
   let formId: string;
   let hookServer: NodeHttpServer;
@@ -74,6 +75,7 @@ describe("form submission (e2e)", () => {
     }).then((r) => json<{ accessToken: string; user: { id: string; tenantId: string } }>(r));
     token = reg.accessToken;
     tenantId = reg.user.tenantId;
+    ownerUserId = reg.user.id;
 
     await prisma.user.update({
       where: { id: reg.user.id },
@@ -229,5 +231,54 @@ describe("form submission (e2e)", () => {
     const status = submission!.integrationStatus as { webhook?: { pushedAt?: string; error?: string } };
     expect(status.webhook?.pushedAt).toBeTruthy();
     expect(status.webhook?.error).toBeUndefined();
+  });
+
+  it("logged form.published when the form went live in beforeAll", async () => {
+    const auditRow = await prisma.auditLog.findFirst({ where: { tenantId, action: "form.published" } });
+    expect(auditRow).not.toBeNull();
+    expect(auditRow!.adminUserId).toBe(ownerUserId);
+    expect((auditRow!.meta as { formId?: string }).formId).toBe(formId);
+  });
+
+  it("logs form.unpublished, form.deleted — but never on a plain autosave update with no status change", async () => {
+    const form2 = await fetch(`${baseUrl}/forms`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ name: "Throwaway Form" }),
+    }).then((r) => json<{ id: string }>(r));
+
+    // A name-only edit (what autosave sends) must not create an audit row.
+    await fetch(`${baseUrl}/forms/${form2.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ name: "Throwaway Form (renamed)" }),
+    });
+    expect(await prisma.auditLog.count({ where: { tenantId, action: { in: ["form.published", "form.unpublished"] }, meta: { path: ["formId"], equals: form2.id } } })).toBe(0);
+
+    const publishSchema = {
+      steps: [{ id: "s1", fields: [{ id: "f1", key: "email", type: "email", label: "Email", required: true }] }],
+      submitLabel: "Send",
+      successMessage: "Thanks!",
+    };
+    await fetch(`${baseUrl}/forms/${form2.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ status: "live", schema: publishSchema }),
+    });
+    await fetch(`${baseUrl}/forms/${form2.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ status: "draft" }),
+    });
+    const unpublishRow = await prisma.auditLog.findFirst({
+      where: { tenantId, action: "form.unpublished", meta: { path: ["formId"], equals: form2.id } },
+    });
+    expect(unpublishRow).not.toBeNull();
+
+    await fetch(`${baseUrl}/forms/${form2.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    const deleteRow = await prisma.auditLog.findFirst({
+      where: { tenantId, action: "form.deleted", meta: { path: ["formId"], equals: form2.id } },
+    });
+    expect(deleteRow).not.toBeNull();
   });
 });

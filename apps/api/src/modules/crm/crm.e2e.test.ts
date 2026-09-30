@@ -21,6 +21,7 @@ describe("CRM integration (e2e)", () => {
   let wsBase: string;
   let token: string;
   let tenantId: string;
+  let ownerUserId: string;
   let agentId: string;
   let publicToken: string;
 
@@ -55,6 +56,7 @@ describe("CRM integration (e2e)", () => {
     }).then((r) => json<{ accessToken: string; user: { id: string; tenantId: string } }>(r));
     token = reg.accessToken;
     tenantId = reg.user.tenantId;
+    ownerUserId = reg.user.id;
 
     const agent = await fetch(`${baseUrl}/agents`, {
       method: "POST",
@@ -150,6 +152,10 @@ describe("CRM integration (e2e)", () => {
       headers: { Authorization: `Bearer ${token}` },
     }).then((r) => json<{ provider: string }>(r));
     expect(connection.provider).toBe("hubspot");
+
+    const auditRow = await prisma.auditLog.findFirst({ where: { tenantId, action: "crm.connected" } });
+    expect(auditRow).not.toBeNull();
+    expect(auditRow!.adminUserId).toBe(ownerUserId);
   });
 
   it("sets a field mapping", async () => {
@@ -221,5 +227,22 @@ describe("CRM integration (e2e)", () => {
     expect(status).toBe(403);
 
     await prisma.tenant.deleteMany({ where: { id: reg2.user.tenantId } });
+  });
+
+  it("disconnecting logs an audit entry and removes the connection", async () => {
+    const res = await fetch(`${baseUrl}/crm/connection`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(res.status).toBe(200);
+
+    const connection = await fetch(`${baseUrl}/crm/connection`, { headers: { Authorization: `Bearer ${token}` } }).then(
+      (r) => json(r),
+    );
+    expect(connection).toBeFalsy();
+
+    const auditRow = await prisma.auditLog.findFirst({ where: { tenantId, action: "crm.disconnected" } });
+    expect(auditRow).not.toBeNull();
+    expect(auditRow!.adminUserId).toBe(ownerUserId);
   });
 });

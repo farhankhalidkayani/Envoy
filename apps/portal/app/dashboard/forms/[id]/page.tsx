@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import type { Form, FormSubmission } from "@envoy/sdk";
@@ -37,7 +37,20 @@ export default function FormBuilderPage() {
   const [tab, setTab] = useState<Tab>("build");
   const [confirmUnpublish, setConfirmUnpublish] = useState(false);
 
+  // Persists across React StrictMode's dev-only double-invoke of this effect
+  // (mount → cleanup → mount) — a ref, unlike a local `cancelled` flag, is
+  // shared by both invocations, so this guarantees exactly one fetch and one
+  // application of its result no matter how many times the effect body
+  // itself runs. Without it, a second fetch's result can land after the
+  // user has already started editing and silently overwrite their changes
+  // — worse here than a plain read-only page, since autosave (below) would
+  // then write that stale, clobbered state straight back to the server.
+  const fetchedRef = useRef<string | null>(null);
+
   useEffect(() => {
+    if (fetchedRef.current === id) return;
+    fetchedRef.current = id;
+
     api.forms
       .get(id)
       .then((f) => {

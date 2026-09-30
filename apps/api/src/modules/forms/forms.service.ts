@@ -12,6 +12,7 @@ import {
 import { PrismaService } from "../core/prisma/prisma.service.js";
 import { safeFetch } from "../core/common/safe-fetch.js";
 import { CaptureRoutingService } from "../routing/capture-routing.service.js";
+import { AuditService } from "../core/audit/audit.service.js";
 
 const MAX_OPTIONS = 500;
 const MAX_OPTIONS_RESPONSE_BYTES = 1_000_000;
@@ -37,6 +38,7 @@ export class FormsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly routing: CaptureRoutingService,
+    private readonly audit: AuditService,
   ) {}
 
   list(tenantId: string) {
@@ -59,7 +61,12 @@ export class FormsService {
     });
   }
 
-  async update(tenantId: string, id: string, input: { name?: string; status?: "draft" | "live"; schema?: unknown }) {
+  async update(
+    tenantId: string,
+    id: string,
+    actorUserId: string,
+    input: { name?: string; status?: "draft" | "live"; schema?: unknown },
+  ) {
     const form = await this.get(tenantId, id);
     const schema = input.schema !== undefined ? parseSchema(input.schema) : undefined;
     if (input.status === "live") {
@@ -68,7 +75,7 @@ export class FormsService {
         throw new BadRequestException("Add at least one field before publishing");
       }
     }
-    return this.prisma.client.form.update({
+    const updated = await this.prisma.client.form.update({
       where: { id },
       data: {
         name: input.name,
@@ -76,11 +83,22 @@ export class FormsService {
         schema: schema as unknown as Prisma.InputJsonValue | undefined,
       },
     });
+    // Only a real publish/unpublish is audit-worthy — autosave calls `update`
+    // every couple of seconds while a form is being edited, and none of
+    // those carry a status change (see apps/portal's autosave effect).
+    if (input.status && input.status !== form.status) {
+      await this.audit.log(actorUserId, tenantId, input.status === "live" ? "form.published" : "form.unpublished", {
+        formId: id,
+        name: updated.name,
+      });
+    }
+    return updated;
   }
 
-  async remove(tenantId: string, id: string) {
-    await this.get(tenantId, id);
+  async remove(tenantId: string, id: string, actorUserId: string) {
+    const form = await this.get(tenantId, id);
     await this.prisma.client.form.delete({ where: { id } });
+    await this.audit.log(actorUserId, tenantId, "form.deleted", { formId: id, name: form.name });
   }
 
   async listSubmissions(tenantId: string, formId: string, opts: { cursor?: string; take?: number } = {}) {

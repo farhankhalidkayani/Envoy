@@ -66,7 +66,7 @@ export interface Conversation {
 export interface CrmConnection {
   id: string;
   tenantId: string;
-  provider: "hubspot" | "zoho";
+  provider: "hubspot";
   fieldMapping: Record<string, string>;
   createdAt: string;
   updatedAt: string;
@@ -140,6 +140,15 @@ export interface AdminTenant {
 
 export interface AdminTenantDetail extends AdminTenant {
   users: Array<{ id: string; email: string; role: UserRole; featureAccess: FeatureAccess }>;
+  crmConnections: Array<{ provider: "hubspot"; createdAt: string; updatedAt: string }>;
+  integrations: Array<{ id: string; type: IntegrationType; enabled: boolean; createdAt: string; updatedAt: string }>;
+  forms: Array<{
+    id: string;
+    name: string;
+    status: "draft" | "live";
+    updatedAt: string;
+    _count: { submissions: number };
+  }>;
 }
 
 export interface AuditLogEntry {
@@ -149,7 +158,7 @@ export interface AuditLogEntry {
   action: string;
   meta: Record<string, unknown>;
   createdAt: string;
-  adminUser: { email: string };
+  adminUser: { email: string; role: UserRole };
 }
 
 export interface Form {

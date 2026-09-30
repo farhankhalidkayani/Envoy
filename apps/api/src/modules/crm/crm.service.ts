@@ -4,6 +4,7 @@ import { PrismaService } from "../core/prisma/prisma.service.js";
 import { RedisService } from "../core/redis/redis.service.js";
 import { consumeOAuthState, issueOAuthState } from "../core/common/oauth-state.js";
 import { sanitizeCapturedData } from "../core/common/sanitize-captured-data.js";
+import { AuditService } from "../core/audit/audit.service.js";
 import { CRM_PROVIDER } from "./providers/crm-provider.module.js";
 import type { CrmProvider, CrmPushResult } from "./providers/types.js";
 import { decryptToken, encryptToken } from "./token-crypto.js";
@@ -20,6 +21,7 @@ export class CrmService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
+    private readonly audit: AuditService,
     @Inject(CRM_PROVIDER) private readonly provider: CrmProvider,
   ) {}
 
@@ -37,7 +39,7 @@ export class CrmService {
    * push mechanism is testable end-to-end. With it, returns the real
    * HubSpot authorize URL for the client to redirect to.
    */
-  async initiateConnect(tenantId: string): Promise<{ mode: "mock" | "oauth"; authorizeUrl?: string }> {
+  async initiateConnect(tenantId: string, actorUserId: string): Promise<{ mode: "mock" | "oauth"; authorizeUrl?: string }> {
     const clientId = process.env.HUBSPOT_CLIENT_ID;
     if (!clientId) {
       await this.prisma.client.crmConnection.upsert({
@@ -51,6 +53,7 @@ export class CrmService {
         update: {},
       });
       this.logger.warn(`HUBSPOT_CLIENT_ID not set — connected tenant ${tenantId} in mock mode`);
+      await this.audit.log(actorUserId, tenantId, "crm.connected", { provider: "hubspot", mode: "mock" });
       return { mode: "mock" };
     }
 
@@ -107,12 +110,13 @@ export class CrmService {
     });
   }
 
-  async disconnect(tenantId: string) {
+  async disconnect(tenantId: string, actorUserId: string) {
     await this.prisma.client.crmConnection
       .delete({ where: { tenantId_provider: { tenantId, provider: "hubspot" } } })
       .catch(() => {
         // Already disconnected — deleting a nonexistent connection is a no-op, not an error.
       });
+    await this.audit.log(actorUserId, tenantId, "crm.disconnected", { provider: "hubspot" });
   }
 
   /**

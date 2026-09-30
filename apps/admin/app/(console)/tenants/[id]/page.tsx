@@ -239,6 +239,60 @@ export default function TenantDetailPage() {
         )}
       </div>
 
+      <div className="card" style={{ marginTop: 16 }}>
+        <strong style={{ fontSize: 13.5, display: "block", marginBottom: 12 }}>CRM &amp; integrations</strong>
+        {tenant.crmConnections.length === 0 && tenant.integrations.length === 0 ? (
+          <p style={{ color: "var(--ink-faint)", fontSize: 13, margin: 0 }}>Nothing connected.</p>
+        ) : (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {tenant.crmConnections.map((c) => (
+              <span key={c.provider} className="pill pill-ok" title={`Connected ${new Date(c.createdAt).toLocaleString()}`}>
+                CRM: {c.provider}
+              </span>
+            ))}
+            {tenant.integrations.map((i) => (
+              <span
+                key={i.id}
+                className={`pill ${i.enabled ? "pill-ok" : "pill-gray"}`}
+                title={`${i.enabled ? "Connected" : "Disabled"} · updated ${new Date(i.updatedAt).toLocaleString()}`}
+              >
+                {i.type}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <strong style={{ fontSize: 13.5, display: "block", marginBottom: 12 }}>Lead forms</strong>
+        {tenant.forms.length === 0 ? (
+          <p style={{ color: "var(--ink-faint)", fontSize: 13, margin: 0 }}>No forms yet.</p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Status</th>
+                <th className="num">Submissions</th>
+                <th>Updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tenant.forms.map((f) => (
+                <tr key={f.id}>
+                  <td>{f.name}</td>
+                  <td>
+                    <span className={`pill ${f.status === "live" ? "pill-ok" : "pill-gray"}`}>{f.status}</span>
+                  </td>
+                  <td className="num">{f._count.submissions}</td>
+                  <td>{new Date(f.updatedAt).toLocaleDateString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
       <div className="card" style={{ marginTop: 16, borderColor: "var(--stop)" }}>
         <strong style={{ fontSize: 13.5, display: "block", marginBottom: 8 }}>Danger zone</strong>
         <p style={{ color: "var(--ink-faint)", fontSize: 12.5, marginBottom: 12 }}>

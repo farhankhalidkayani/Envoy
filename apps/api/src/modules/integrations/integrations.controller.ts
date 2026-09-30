@@ -53,7 +53,7 @@ export class IntegrationsController {
     @CurrentUser() user: JwtPayload,
     @Body(new ZodValidationPipe(WebhookConfigDto)) config: z.infer<typeof WebhookConfigDto>,
   ) {
-    return this.integrations.connectWebhook(user.tenantId!, config);
+    return this.integrations.connectWebhook(user.tenantId!, user.sub, config);
   }
 
   @Post("email/connect")
@@ -63,14 +63,14 @@ export class IntegrationsController {
     @CurrentUser() user: JwtPayload,
     @Body(new ZodValidationPipe(EmailConfigDto)) config: z.infer<typeof EmailConfigDto>,
   ) {
-    return this.integrations.connectEmail(user.tenantId!, config);
+    return this.integrations.connectEmail(user.tenantId!, user.sub, config);
   }
 
   @Post("calendar/connect")
   @UseGuards(...GUARDS)
   @RequireFeature("integrations")
   connectCalendar(@CurrentUser() user: JwtPayload) {
-    return this.integrations.initiateCalendarConnect(user.tenantId!);
+    return this.integrations.initiateCalendarConnect(user.tenantId!, user.sub);
   }
 
   @Patch(":type/config")
@@ -89,7 +89,7 @@ export class IntegrationsController {
   @UseGuards(...GUARDS)
   @RequireFeature("integrations")
   disconnect(@CurrentUser() user: JwtPayload, @Param("type") type: "webhook" | "email" | "calendar") {
-    return this.integrations.disconnect(user.tenantId!, type);
+    return this.integrations.disconnect(user.tenantId!, user.sub, type);
   }
 
   @Post(":type/push/:conversationId")
