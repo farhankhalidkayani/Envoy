@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "../../lib/auth";
 import { BuildingIcon, ClockListIcon, AlertIcon, LogoMark } from "../../components/icons";
+import { ThemeToggle } from "../../components/ThemeToggle";
 
 const NAV = [
   { href: "/tenants", label: "Tenants", icon: BuildingIcon },
@@ -59,9 +60,12 @@ export default function ConsoleLayout({ children }: { children: ReactNode }) {
             <span className="app-sidebar-avatar">{initial}</span>
             <span className="app-sidebar-user-email">{user.email}</span>
           </div>
-          <button onClick={logout} className="btn">
-            Sign out
-          </button>
+          <div style={{ display: "flex", gap: 6 }}>
+            <ThemeToggle />
+            <button onClick={logout} className="btn" style={{ flex: 1 }}>
+              Sign out
+            </button>
+          </div>
         </div>
       </aside>
 

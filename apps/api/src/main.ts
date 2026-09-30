@@ -10,6 +10,15 @@ async function bootstrap() {
   // (stripe.webhooks.constructEvent needs the exact bytes, not the
   // JSON-parsed body). Nest populates req.rawBody alongside normal parsing.
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
+  // Behind a load balancer/reverse proxy, req.ip is the proxy's address
+  // unless Express is told which hop(s) to trust — without this, every
+  // visitor collapses onto one IP for rate-limiting purposes. TRUST_PROXY
+  // is the hop count (e.g. "1" for a single LB in front); unset by default
+  // since trusting it blindly with no proxy in front lets a client spoof
+  // X-Forwarded-For to dodge per-IP limits entirely.
+  if (process.env.TRUST_PROXY) {
+    app.set("trust proxy", Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY);
+  }
   // Default express body limit (100kb) is too small for a form's "file"
   // field, which transports the upload as a base64 data URL inside the JSON
   // body — see FormField.fileMaxSizeKb (capped at 1.5MB raw, ~2MB base64).

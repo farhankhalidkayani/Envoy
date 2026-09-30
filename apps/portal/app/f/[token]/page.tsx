@@ -60,6 +60,7 @@ export default function PublicFormPage() {
             {!embed && <h1 className="pf-title">{form.name}</h1>}
             <FormRenderer
               schema={form.schema}
+              accent={form.schema.accentColor}
               loadOptions={async (fieldKey, answers) => {
                 try {
                   return await api.publicForms.options(token, fieldKey, answers);

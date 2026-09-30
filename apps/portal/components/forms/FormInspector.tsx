@@ -318,6 +318,27 @@ export function FormSettings({
           />
         </Row>
       </Section>
+      <Section title="Appearance">
+        <Row label="Accent color" hint="Used for the submit button and step progress bar.">
+          <div className="fi-inline">
+            <input
+              type="color"
+              value={schema.accentColor ?? "#3757e8"}
+              onChange={(e) => onChange((s) => ({ ...s, accentColor: e.target.value }))}
+              style={{ width: 40, height: 28, padding: 2 }}
+            />
+            {schema.accentColor && (
+              <button
+                type="button"
+                className="btn fi-small-btn"
+                onClick={() => onChange((s) => { const { accentColor: _drop, ...rest } = s; return rest; })}
+              >
+                Reset to default
+              </button>
+            )}
+          </div>
+        </Row>
+      </Section>
     </div>
   );
 }

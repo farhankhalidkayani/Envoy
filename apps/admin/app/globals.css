@@ -37,6 +37,63 @@
   --radius-sm: 8px;
 }
 
+/* Dark mode: same token names, darker values — every rule below already
+   reads these custom properties, so no per-component styling is needed.
+   Explicit choice (data-theme, set by the toggle + persisted to
+   localStorage) wins; with no explicit choice, follow the OS preference. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #eef0f5;
+  --ink-soft: #bab5cc;
+  --ink-faint: #9188a4;
+  --line: #2d2836;
+  --line-strong: #3d3648;
+  --panel: #1e1928;
+  --panel-hover: #272031;
+  --paper: #16121e;
+
+  --accent: #9b7aef;
+  --accent-2: #bfa5ff;
+  --accent-hover: #ad91f5;
+  --accent-soft: #241c3a;
+  --accent-line: #3f3260;
+
+  --ok: #3fbf8f;
+  --ok-soft: #113328;
+  --warn: #d9a53d;
+  --warn-soft: #3a2f12;
+  --stop: #e0605f;
+  --stop-hover: #c44b4a;
+  --stop-soft: #3a1f1f;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ink: #eef0f5;
+    --ink-soft: #bab5cc;
+    --ink-faint: #9188a4;
+    --line: #2d2836;
+    --line-strong: #3d3648;
+    --panel: #1e1928;
+    --panel-hover: #272031;
+    --paper: #16121e;
+
+    --accent: #9b7aef;
+    --accent-2: #bfa5ff;
+    --accent-hover: #ad91f5;
+    --accent-soft: #241c3a;
+    --accent-line: #3f3260;
+
+    --ok: #3fbf8f;
+    --ok-soft: #113328;
+    --warn: #d9a53d;
+    --warn-soft: #3a2f12;
+    --stop: #e0605f;
+    --stop-hover: #c44b4a;
+    --stop-soft: #3a1f1f;
+  }
+}
+
 * {
   box-sizing: border-box;
 }
@@ -98,7 +155,7 @@ textarea {
   padding: 9px 11px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: #fff;
+  background: var(--panel);
   color: var(--ink);
   width: 100%;
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
@@ -129,7 +186,7 @@ button {
   padding: 9px 15px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--panel);
   color: var(--ink);
   font-weight: 600;
   font-size: 13.5px;
@@ -272,7 +329,7 @@ td a:hover {
 }
 
 .pill-gray {
-  background: #eef1f5;
+  background: var(--panel-hover);
   color: var(--ink-faint);
 }
 

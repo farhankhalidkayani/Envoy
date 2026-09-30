@@ -37,6 +37,63 @@
   --radius-sm: 8px;
 }
 
+/* Dark mode: same token names, darker values — every rule below already
+   reads these custom properties, so no per-component styling is needed.
+   Explicit choice (data-theme, set by the toggle + persisted to
+   localStorage) wins; with no explicit choice, follow the OS preference. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #eef0f5;
+  --ink-soft: #b6bccc;
+  --ink-faint: #8d94a8;
+  --line: #2a2e3a;
+  --line-strong: #383d4c;
+  --panel: #1b1e28;
+  --panel-hover: #232733;
+  --paper: #14161e;
+
+  --accent: #5b7bff;
+  --accent-2: #8fa4ff;
+  --accent-hover: #7691ff;
+  --accent-soft: #1c2340;
+  --accent-line: #33406e;
+
+  --ok: #3fbf8f;
+  --ok-soft: #113328;
+  --warn: #d9a53d;
+  --warn-soft: #3a2f12;
+  --stop: #e0605f;
+  --stop-hover: #c44b4a;
+  --stop-soft: #3a1f1f;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ink: #eef0f5;
+    --ink-soft: #b6bccc;
+    --ink-faint: #8d94a8;
+    --line: #2a2e3a;
+    --line-strong: #383d4c;
+    --panel: #1b1e28;
+    --panel-hover: #232733;
+    --paper: #14161e;
+
+    --accent: #5b7bff;
+    --accent-2: #8fa4ff;
+    --accent-hover: #7691ff;
+    --accent-soft: #1c2340;
+    --accent-line: #33406e;
+
+    --ok: #3fbf8f;
+    --ok-soft: #113328;
+    --warn: #d9a53d;
+    --warn-soft: #3a2f12;
+    --stop: #e0605f;
+    --stop-hover: #c44b4a;
+    --stop-soft: #3a1f1f;
+  }
+}
+
 * {
   box-sizing: border-box;
 }
@@ -103,7 +160,7 @@ textarea {
   padding: 9px 11px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: #fff;
+  background: var(--panel);
   color: var(--ink);
   width: 100%;
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
@@ -134,7 +191,7 @@ button {
   padding: 9px 15px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--panel);
   color: var(--ink);
   font-weight: 600;
   font-size: 13.5px;
@@ -277,7 +334,7 @@ td a:hover {
 }
 
 .pill-gray {
-  background: #eef1f5;
+  background: var(--panel-hover);
   color: var(--ink-faint);
 }
 
@@ -683,6 +740,10 @@ button:focus-visible {
   font-size: 12px;
   color: var(--warn);
   white-space: nowrap;
+}
+
+.fb-dirty-saved {
+  color: var(--ink-faint);
 }
 
 .fb-actions {

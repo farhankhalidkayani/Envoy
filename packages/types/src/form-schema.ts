@@ -1,4 +1,5 @@
 import { z } from "zod";
+import safeRegex from "safe-regex";
 
 /**
  * Custom lead forms: a tenant-authored, multi-step, conditional form. The
@@ -117,6 +118,10 @@ export const FormField = z
   .refine((f) => f.type !== "content" || !!f.content?.trim(), {
     message: "a content block needs text to display",
     path: ["content"],
+  })
+  .refine((f) => !f.validation?.pattern || safeRegex(f.validation.pattern), {
+    message: "this pattern is too complex (risk of catastrophic backtracking) — simplify it",
+    path: ["validation", "pattern"],
   });
 export type FormField = z.infer<typeof FormField>;
 
@@ -133,6 +138,11 @@ export const FormSchema = z
     steps: z.array(FormStep).min(1).max(20),
     submitLabel: z.string().min(1).max(60).default("Submit"),
     successMessage: z.string().min(1).max(500).default("Thanks! We'll be in touch."),
+    /** Brand color for the submit button/progress bar on the public form — unset falls back to the renderer's default. */
+    accentColor: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/, "must be a hex color like #3757e8")
+      .optional(),
   })
   .superRefine((schema, ctx) => {
     // Conditions may only reference fields that come EARLIER in the form.
@@ -222,9 +232,11 @@ export function resolveVisibility(schema: FormSchema | PublicFormSchema, data: F
   return { visibleStepIds, visibleFieldIds, data: effective };
 }
 
-// ponytail: tenant-authored regex runs server-side on public input; values
-// are length-capped (MAX_TEXT_LENGTH) and patterns capped at 200 chars, but a
-// pathological pattern can still backtrack. Move to RE2 if abuse shows up.
+// Tenant-authored regex runs server-side on public input. FormField's
+// validation.pattern refine (above) already rejects catastrophically
+// backtracking patterns with safe-regex at schema-save time — a pattern
+// can't reach here unless it passed that check — and values are
+// length-capped regardless as a second layer.
 const MAX_TEXT_LENGTH = 5000;
 
 type AnyFormField = FormField | PublicFormField;

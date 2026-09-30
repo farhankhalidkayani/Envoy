@@ -223,16 +223,24 @@ export class IntegrationsService {
 
     // Same visibility CRM push gets via crmPushedAt/crmPushError, generalized
     // to a per-type JSON map since up to three integrations run independently.
-    // ponytail: read-modify-write on the JSON column; two integrations
-    // finishing at the same instant can overwrite each other's entry. Switch
-    // to a jsonb_set raw update if that shows up in practice.
-    const status = (record.integrationStatus as Record<string, { pushedAt?: string; error?: string }>) ?? {};
-    status[integration.type] = result.success ? { pushedAt: new Date().toISOString() } : { error: result.error };
-    const data = { integrationStatus: status as Prisma.InputJsonValue };
+    // jsonb_set does the merge inside Postgres in one statement — unlike a
+    // read-modify-write in application code, two integrations finishing at
+    // the same instant can't clobber each other's entry, since there's no
+    // window where either holds a stale in-memory copy of the column.
+    const entry = JSON.stringify(result.success ? { pushedAt: new Date().toISOString() } : { error: result.error });
+    const path = `{${integration.type}}`;
     if ("conversationId" in source) {
-      await this.prisma.client.conversation.update({ where: { id: source.conversationId }, data });
+      await this.prisma.client.$executeRaw`
+        UPDATE "conversations"
+        SET "integrationStatus" = jsonb_set(COALESCE("integrationStatus", '{}'::jsonb), ${path}::text[], ${entry}::jsonb, true)
+        WHERE id = ${source.conversationId}
+      `;
     } else {
-      await this.prisma.client.formSubmission.update({ where: { id: source.formSubmissionId }, data });
+      await this.prisma.client.$executeRaw`
+        UPDATE "form_submissions"
+        SET "integrationStatus" = jsonb_set(COALESCE("integrationStatus", '{}'::jsonb), ${path}::text[], ${entry}::jsonb, true)
+        WHERE id = ${source.formSubmissionId}
+      `;
     }
 
     return result;

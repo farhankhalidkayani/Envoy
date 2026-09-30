@@ -16,9 +16,18 @@ export const metadata = {
   description: "Operator console — tenants, access control, pricing, audit log.",
 };
 
+// Applies a stored theme choice before first paint — without this the page
+// would flash light, then snap to dark once React hydrates and reads
+// localStorage. suppressHydrationWarning on <html> because the server can't
+// know this value; only the data-theme attribute this script sets differs.
+const THEME_INIT_SCRIPT = `try{var t=localStorage.getItem("envoy-theme");if(t==="dark"||t==="light")document.documentElement.dataset.theme=t;}catch(e){}`;
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={jakarta.variable}>
+    <html lang="en" className={jakarta.variable} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body>
         <ToastProvider>
           <AuthProvider>{children}</AuthProvider>

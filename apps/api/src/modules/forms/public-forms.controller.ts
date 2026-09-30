@@ -12,8 +12,8 @@ const AnswersDto = z.record(z.string(), z.unknown());
  * the form's publicToken. Rate-limited per IP+form since submit writes rows
  * and fans out pushes, and the options proxy makes outbound requests.
  *
- * ponytail: keyed on req.ip; behind a load balancer set Express "trust
- * proxy" or every visitor shares the proxy's IP (and one limit).
+ * req.ip reflects the real client address only when TRUST_PROXY is set
+ * (see main.ts) to match the deployment's actual proxy hop count.
  */
 @Controller("public/forms")
 export class PublicFormsController {

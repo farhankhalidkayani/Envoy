@@ -58,6 +58,22 @@
   margin-bottom: 8px;
 }
 
+.eb-pane-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.eb-history-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.eb-history-actions .eb-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .eb-palette-group + .eb-palette-group {
   margin-top: 12px;
 }

@@ -218,4 +218,16 @@ describe("form submission (e2e)", () => {
     },
     10000,
   );
+
+  it("persists integrationStatus.webhook.pushedAt via the atomic jsonb_set update", async () => {
+    const deadline = Date.now() + 8000;
+    let submission = await prisma.formSubmission.findFirst({ where: { formId }, orderBy: { createdAt: "desc" } });
+    while (!(submission?.integrationStatus as { webhook?: { pushedAt?: string } })?.webhook?.pushedAt && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 200));
+      submission = await prisma.formSubmission.findFirst({ where: { formId }, orderBy: { createdAt: "desc" } });
+    }
+    const status = submission!.integrationStatus as { webhook?: { pushedAt?: string; error?: string } };
+    expect(status.webhook?.pushedAt).toBeTruthy();
+    expect(status.webhook?.error).toBeUndefined();
+  });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -115,10 +115,81 @@ export function BlockBuilder<C, B>(props: BlockBuilderProps<C, B>) {
   // read the freshest tree rather than a stale closure.
   const latest = useRef(containers);
   latest.current = containers;
+  // Keyboard-shortcut handlers below are registered once (empty deps, so
+  // Escape/Space dnd-kit focus isn't disturbed by re-subscribing every
+  // render) — route onChange through a ref so they never call a stale prop.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  // Undo/redo: a stack of past trees plus a stack of undone-but-redoable
+  // ones. Every settled edit pushes exactly one entry (see `commit`); a
+  // whole drag gesture (which fires many live intermediate updates via
+  // `commitLive`) also collapses to exactly one, via `finalizeDrag`.
+  const [past, setPast] = useState<C[][]>([]);
+  const [future, setFuture] = useState<C[][]>([]);
+  const HISTORY_LIMIT = 50;
+
   const commit = (next: C[]) => {
+    setPast((p) => [...p, latest.current].slice(-HISTORY_LIMIT));
+    setFuture([]);
     latest.current = next;
-    onChange(next);
+    onChangeRef.current(next);
   };
+  /** Live intermediate update during a drag gesture — never its own undo step (see finalizeDrag). */
+  const commitLive = (next: C[]) => {
+    latest.current = next;
+    onChangeRef.current(next);
+  };
+  /** Settles a whole drag gesture as one undo step, using the pre-drag snapshot as "before". */
+  const finalizeDrag = (before: C[] | null, next?: C[]) => {
+    const after = next ?? latest.current;
+    if (!before || before === after) {
+      latest.current = after;
+      onChangeRef.current(after);
+      return;
+    }
+    setPast((p) => [...p, before].slice(-HISTORY_LIMIT));
+    setFuture([]);
+    latest.current = after;
+    onChangeRef.current(after);
+  };
+
+  function undo() {
+    setPast((p) => {
+      if (!p.length) return p;
+      const prev = p[p.length - 1]!;
+      setFuture((f) => [latest.current, ...f]);
+      latest.current = prev;
+      onChangeRef.current(prev);
+      return p.slice(0, -1);
+    });
+  }
+  function redo() {
+    setFuture((f) => {
+      if (!f.length) return f;
+      const next = f[0]!;
+      setPast((p) => [...p, latest.current]);
+      latest.current = next;
+      onChangeRef.current(next);
+      return f.slice(1);
+    });
+  }
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const el = e.target as HTMLElement | null;
+      // Let native undo work in text fields (the inspector's inputs) — only
+      // handle the shortcut when focus is on the canvas/palette itself.
+      if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "z") return;
+      e.preventDefault();
+      if (e.shiftKey) redo();
+      else undo();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), // so a click still selects
@@ -206,16 +277,18 @@ export function BlockBuilder<C, B>(props: BlockBuilderProps<C, B>) {
 
   function onDragOver(e: DragOverEvent) {
     // Blocks hop containers live while dragging so the target list opens a
-    // gap under the pointer; same-container reorders settle on drop.
+    // gap under the pointer; same-container reorders settle on drop. Live —
+    // never its own undo step (the whole gesture settles as one in onDragEnd).
     if (kindOf(e.active) !== "block" || !e.over) return;
     const toCid = containerIdForOver(e.over);
     const from = findBlock(a, latest.current, String(e.active.id));
     if (!toCid || !from || a.containerId(latest.current[from.containerIndex]!) === toCid) return;
-    commit(moveBlock(a, latest.current, String(e.active.id), toCid, insertionIndex(e.over, e.active)));
+    commitLive(moveBlock(a, latest.current, String(e.active.id), toCid, insertionIndex(e.over, e.active)));
   }
 
   function onDragEnd(e: DragEndEvent) {
     setActive(null);
+    const dragStartSnapshot = snapshot.current;
     snapshot.current = null;
     const { active: act, over } = e;
     if (!over) return;
@@ -224,7 +297,7 @@ export function BlockBuilder<C, B>(props: BlockBuilderProps<C, B>) {
     if (kind === "container") {
       const from = findContainerIndex(a, latest.current, String(act.id).slice(CONTAINER.length));
       const to = findContainerIndex(a, latest.current, String(over.id).slice(CONTAINER.length));
-      commit(moveContainer(latest.current, from, to));
+      finalizeDrag(dragStartSnapshot, moveContainer(latest.current, from, to));
       return;
     }
 
@@ -235,7 +308,7 @@ export function BlockBuilder<C, B>(props: BlockBuilderProps<C, B>) {
       const item = palette.find((p) => p.type === String(act.id).slice(PALETTE.length));
       if (!item) return;
       const block = item.create();
-      commit(insertBlock(a, latest.current, block, toCid, insertionIndex(over, act)));
+      finalizeDrag(dragStartSnapshot, insertBlock(a, latest.current, block, toCid, insertionIndex(over, act)));
       setSelected({ kind: "block", id: a.blockId(block) });
       return;
     }
@@ -247,12 +320,15 @@ export function BlockBuilder<C, B>(props: BlockBuilderProps<C, B>) {
     const hopped = from && a.containerId(latest.current[from.containerIndex]!) !== dragStartContainer.current;
     if (kind === "block" && !hopped && kindOf(over) === "block" && over.id !== act.id) {
       const target = findBlock(a, latest.current, String(over.id));
-      if (target) commit(moveBlock(a, latest.current, String(act.id), toCid, target.blockIndex));
+      if (target) finalizeDrag(dragStartSnapshot, moveBlock(a, latest.current, String(act.id), toCid, target.blockIndex));
+    } else if (kind === "block" && hopped) {
+      // Already placed live during onDragOver — just settle the one undo step for the whole gesture.
+      finalizeDrag(dragStartSnapshot);
     }
   }
 
   function onDragCancel() {
-    if (snapshot.current) commit(snapshot.current);
+    if (snapshot.current) commitLive(snapshot.current);
     snapshot.current = null;
     setActive(null);
   }
@@ -303,7 +379,31 @@ export function BlockBuilder<C, B>(props: BlockBuilderProps<C, B>) {
     >
       <div className="eb-root">
         <aside className="eb-palette" aria-label={props.paletteTitle ?? "Blocks"}>
-          <div className="eb-pane-title">{props.paletteTitle ?? "Blocks"}</div>
+          <div className="eb-pane-title eb-pane-title-row">
+            <span>{props.paletteTitle ?? "Blocks"}</span>
+            <span className="eb-history-actions">
+              <button
+                type="button"
+                className="eb-icon-btn"
+                aria-label="Undo"
+                title="Undo (Cmd/Ctrl+Z)"
+                disabled={!past.length}
+                onClick={undo}
+              >
+                ↺
+              </button>
+              <button
+                type="button"
+                className="eb-icon-btn"
+                aria-label="Redo"
+                title="Redo (Cmd/Ctrl+Shift+Z)"
+                disabled={!future.length}
+                onClick={redo}
+              >
+                ↻
+              </button>
+            </span>
+          </div>
           {groups.map(([group, items]) => (
             <div key={group} className="eb-palette-group">
               {group && <div className="eb-palette-group-title">{group}</div>}

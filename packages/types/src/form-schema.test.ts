@@ -47,6 +47,25 @@ describe("form schema", () => {
     expect(bad.success).toBe(false);
   });
 
+  it("rejects a validation.pattern that risks catastrophic backtracking", () => {
+    const bad = FormSchema.safeParse({
+      steps: [{ id: "s", fields: [
+        { id: "a", key: "a", type: "text", label: "A", validation: { pattern: "(a+)+$" } },
+      ] }],
+    });
+    expect(bad.success).toBe(false);
+    if (!bad.success) expect(bad.error.issues[0]!.path).toContain("pattern");
+  });
+
+  it("accepts an ordinary validation.pattern", () => {
+    const ok = FormSchema.safeParse({
+      steps: [{ id: "s", fields: [
+        { id: "a", key: "a", type: "text", label: "A", validation: { pattern: "^[A-Z]{2}\\d{4}$" } },
+      ] }],
+    });
+    expect(ok.success).toBe(true);
+  });
+
   it("rejects duplicate keys", () => {
     const bad = FormSchema.safeParse({
       steps: [{ id: "s", fields: [

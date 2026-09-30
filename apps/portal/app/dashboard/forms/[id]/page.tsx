@@ -56,27 +56,41 @@ export default function FormBuilderPage() {
   }, []);
 
   const save = useCallback(
-    async (status?: Form["status"]) => {
+    async (status?: Form["status"], opts: { silent?: boolean } = {}) => {
       if (!schema || !form) return;
       if (issues.messages.length) {
-        setError(`Fix ${issues.messages.length} issue${issues.messages.length > 1 ? "s" : ""} before saving: ${issues.messages[0]}`);
+        // Autosave stays quiet about invalid schemas — the "issues to fix" banner
+        // above the canvas already says so; a manual Save click still reports it.
+        if (!opts.silent) {
+          setError(`Fix ${issues.messages.length} issue${issues.messages.length > 1 ? "s" : ""} before saving: ${issues.messages[0]}`);
+        }
         return;
       }
       setSaving(true);
-      setError(null);
+      if (!opts.silent) setError(null);
       try {
         const updated = await api.forms.update(form.id, { name, schema, ...(status ? { status } : {}) });
         setForm(updated);
         setDirty(false);
-        showToast(status === "live" ? "Form published." : status === "draft" ? "Form unpublished." : "Form saved.");
+        if (!opts.silent) {
+          showToast(status === "live" ? "Form published." : status === "draft" ? "Form unpublished." : "Form saved.");
+        }
       } catch (err) {
-        setError(errorMessage(err));
+        if (!opts.silent) setError(errorMessage(err));
       } finally {
         setSaving(false);
       }
     },
     [schema, form, name, issues, showToast],
   );
+
+  // Autosave: 2s after the last edit, once the schema is valid. Manual Save
+  // (button or Cmd+S) still exists for "save right now, don't wait."
+  useEffect(() => {
+    if (!dirty || issues.messages.length) return;
+    const t = setTimeout(() => void save(undefined, { silent: true }), 2000);
+    return () => clearTimeout(t);
+  }, [dirty, schema, name, issues, save]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -126,11 +140,13 @@ export default function FormBuilderPage() {
             }}
           />
           <span className={`pill ${form.status === "live" ? "pill-ok" : "pill-gray"}`}>{form.status}</span>
-          {dirty && <span className="fb-dirty">Unsaved changes</span>}
+          <span className={`fb-dirty${dirty || saving ? "" : " fb-dirty-saved"}`} role="status">
+            {saving ? "Saving…" : dirty ? "Unsaved changes — autosaving…" : "Saved"}
+          </span>
         </div>
         <div className="fb-actions">
           <button className="btn" onClick={() => save()} disabled={saving || !dirty}>
-            {saving ? "Saving…" : "Save"}
+            {saving ? "Saving…" : "Save now"}
           </button>
           {form.status === "live" ? (
             <button className="btn" onClick={() => setConfirmUnpublish(true)} disabled={saving}>
@@ -268,6 +284,7 @@ function PreviewPane({ schema }: { schema: FormSchema }) {
         <FormRenderer
           key={nonce}
           schema={publicSchema}
+          accent={schema.accentColor}
           loadOptions={async (fieldKey, answers) => {
             const source = schema.steps.flatMap((s) => s.fields).find((f) => f.key === fieldKey)?.optionsSource;
             if (!source) return [];

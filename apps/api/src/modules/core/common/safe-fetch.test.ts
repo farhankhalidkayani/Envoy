@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertPublicUrl } from "./safe-fetch.js";
+import { assertPublicUrl, safeFetch } from "./safe-fetch.js";
 
 describe("assertPublicUrl", () => {
   it.each([
@@ -18,5 +18,20 @@ describe("assertPublicUrl", () => {
 
   it("accepts a public IP", async () => {
     await expect(assertPublicUrl("https://8.8.8.8/x")).resolves.toBeInstanceOf(URL);
+  });
+});
+
+describe("safeFetch", () => {
+  // DNS-pinning routes the real connection through a custom undici dispatcher
+  // (see resolveAndValidate/Agent in safe-fetch.ts) instead of plain fetch()
+  // — this exercises that wiring against a real public address rather than
+  // just the address-validation logic above.
+  it("completes a real request through the DNS-pinned dispatcher", async () => {
+    const res = await safeFetch("https://1.1.1.1/", { method: "GET" });
+    expect(res.status).toBeGreaterThan(0);
+  }, 15000);
+
+  it("still rejects a private address before ever dispatching", async () => {
+    await expect(safeFetch("http://127.0.0.1:1/")).rejects.toThrow();
   });
 });
