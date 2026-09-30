@@ -29,7 +29,23 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div style={{ maxWidth: 380, margin: "80px auto", padding: "0 20px" }}>
+    <div className="auth-shell">
+      <div className="auth-panel">
+        <svg className="auth-art" viewBox="0 0 420 420" fill="none" aria-hidden>
+          <path
+            d="M60 140c0-50 46-90 110-90s130 34 150 84c18 46 4 96-38 128-40 30-58 66-108 66-62 0-118-38-134-98C24 194 32 168 60 140z"
+            fill="var(--accent-soft)"
+          />
+          <rect x="150" y="150" width="120" height="90" rx="12" fill="var(--panel)" stroke="var(--line)" />
+          <path d="M162 150v-20a48 48 0 0 1 96 0v20" stroke="var(--accent)" strokeWidth="6" fill="none" />
+          <circle cx="210" cy="195" r="10" fill="var(--accent)" />
+        </svg>
+        <h2 className="auth-panel-title">We&apos;ll get you back in</h2>
+        <p className="auth-panel-text">Enter the email on your workspace and we&apos;ll send a reset link.</p>
+      </div>
+
+      <div className="auth-form-side">
+      <div className="auth-form-wrap">
       <h1 className="page-title page-title--tight">Reset your password</h1>
       <p style={{ color: "var(--ink-faint)", marginBottom: 24, fontSize: 13 }}>
         We&apos;ll email you a link to set a new one.
@@ -71,6 +87,8 @@ export default function ForgotPasswordPage() {
       <p style={{ marginTop: 16, fontSize: 13 }}>
         <Link href="/login">Back to sign in</Link>
       </p>
+      </div>
+      </div>
     </div>
   );
 }

@@ -1,18 +1,18 @@
 :root {
-  --ink: #14171f;
-  --ink-soft: #4b5162;
-  --ink-faint: #7a8195;
-  --line: #e4e2ec;
-  --line-strong: #cfcbdd;
+  --ink: #161e1c;
+  --ink-soft: #445551;
+  --ink-faint: #74847f;
+  --line: #dde6e2;
+  --line-strong: #c1d0ca;
   --panel: #ffffff;
-  --panel-hover: #f8f7fc;
-  --paper: #f4f3f9;
+  --panel-hover: #f2f7f5;
+  --paper: #eef4f1;
 
-  --accent: #7c4fe0;
-  --accent-2: #a685ff;
-  --accent-hover: #653ec2;
-  --accent-soft: #f0eafd;
-  --accent-line: #dccdf9;
+  --accent: #0f766e;
+  --accent-2: #0b5c56;
+  --accent-hover: #0b5c56;
+  --accent-soft: #dcf3ee;
+  --accent-line: #a6dcd2;
 
   --ok: #157a52;
   --ok-soft: #e2f5ec;
@@ -22,12 +22,12 @@
   --stop-hover: #a32c2c;
   --stop-soft: #fbe9e8;
 
-  --sidebar-bg: #15121e;
-  --sidebar-bg-raised: #1e192b;
-  --sidebar-text: #a79cc0;
+  --sidebar-bg: #0e1a17;
+  --sidebar-bg-raised: #16241f;
+  --sidebar-text: #8faba3;
   --sidebar-text-active: #ffffff;
   --sidebar-line: rgba(255, 255, 255, 0.07);
-  --sidebar-active-bg: linear-gradient(135deg, var(--accent), var(--accent-2));
+  --sidebar-active-bg: var(--accent);
 
   --shadow-sm: 0 1px 2px rgba(20, 23, 31, 0.05);
   --shadow-md: 0 10px 28px rgba(20, 23, 31, 0.08), 0 2px 6px rgba(20, 23, 31, 0.05);
@@ -43,20 +43,20 @@
    localStorage) wins; with no explicit choice, follow the OS preference. */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --ink: #eef0f5;
-  --ink-soft: #bab5cc;
-  --ink-faint: #9188a4;
-  --line: #2d2836;
-  --line-strong: #3d3648;
-  --panel: #1e1928;
-  --panel-hover: #272031;
-  --paper: #16121e;
+  --ink: #e7f1ee;
+  --ink-soft: #abc0bb;
+  --ink-faint: #7f938d;
+  --line: #24312d;
+  --line-strong: #32433d;
+  --panel: #16211e;
+  --panel-hover: #1e2c28;
+  --paper: #0f1815;
 
-  --accent: #9b7aef;
-  --accent-2: #bfa5ff;
-  --accent-hover: #ad91f5;
-  --accent-soft: #241c3a;
-  --accent-line: #3f3260;
+  --accent: #2dd4bf;
+  --accent-2: #14b8a6;
+  --accent-hover: #5eead4;
+  --accent-soft: #123330;
+  --accent-line: #1d5850;
 
   --ok: #3fbf8f;
   --ok-soft: #113328;
@@ -69,20 +69,20 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --ink: #eef0f5;
-    --ink-soft: #bab5cc;
-    --ink-faint: #9188a4;
-    --line: #2d2836;
-    --line-strong: #3d3648;
-    --panel: #1e1928;
-    --panel-hover: #272031;
-    --paper: #16121e;
+    --ink: #e7f1ee;
+    --ink-soft: #abc0bb;
+    --ink-faint: #7f938d;
+    --line: #24312d;
+    --line-strong: #32433d;
+    --panel: #16211e;
+    --panel-hover: #1e2c28;
+    --paper: #0f1815;
 
-    --accent: #9b7aef;
-    --accent-2: #bfa5ff;
-    --accent-hover: #ad91f5;
-    --accent-soft: #241c3a;
-    --accent-line: #3f3260;
+    --accent: #2dd4bf;
+    --accent-2: #14b8a6;
+    --accent-hover: #5eead4;
+    --accent-soft: #123330;
+    --accent-line: #1d5850;
 
     --ok: #3fbf8f;
     --ok-soft: #113328;
@@ -213,15 +213,15 @@ button {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  background: var(--accent);
   border-color: transparent;
   color: #fff;
-  box-shadow: 0 1px 2px rgba(124, 79, 224, 0.15), 0 4px 12px rgba(124, 79, 224, 0.2);
+  box-shadow: 0 1px 2px rgba(15, 118, 110, 0.15), 0 4px 12px rgba(15, 118, 110, 0.2);
 }
 
 .btn-primary:hover:not(:disabled) {
   filter: brightness(1.06);
-  box-shadow: 0 2px 4px rgba(124, 79, 224, 0.22), 0 8px 20px rgba(124, 79, 224, 0.28);
+  box-shadow: 0 2px 4px rgba(15, 118, 110, 0.22), 0 8px 20px rgba(15, 118, 110, 0.28);
   transform: translateY(-1px);
 }
 
@@ -419,12 +419,12 @@ button:focus-visible {
   width: 26px;
   height: 26px;
   border-radius: 8px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  background: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(124, 79, 224, 0.4);
+  box-shadow: 0 2px 8px rgba(15, 118, 110, 0.4);
 }
 
 .app-sidebar-brand-name {
@@ -475,7 +475,7 @@ button:focus-visible {
 .nav-link.active {
   background: var(--sidebar-active-bg);
   color: var(--sidebar-text-active);
-  box-shadow: 0 4px 14px rgba(124, 79, 224, 0.4);
+  box-shadow: 0 4px 14px rgba(15, 118, 110, 0.4);
 }
 
 .nav-link.active svg {
@@ -675,5 +675,65 @@ button:focus-visible {
 @media (max-width: 480px) {
   .stat-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ───────────────────────── Auth split screen ───────────────────────── */
+
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.auth-panel {
+  background: var(--sidebar-bg);
+  padding: 56px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.auth-art {
+  width: 100%;
+  max-width: 340px;
+  margin-bottom: 36px;
+}
+
+.auth-panel-title {
+  font-size: 26px;
+  font-weight: 750;
+  letter-spacing: -0.015em;
+  max-width: 380px;
+  margin: 0 0 14px;
+  color: #fff;
+}
+
+.auth-panel-text {
+  color: var(--sidebar-text);
+  font-size: 14.5px;
+  line-height: 1.6;
+  max-width: 380px;
+}
+
+.auth-form-side {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.auth-form-wrap {
+  width: 100%;
+  max-width: 360px;
+}
+
+@media (max-width: 860px) {
+  .auth-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-panel {
+    display: none;
   }
 }

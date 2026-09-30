@@ -1,38 +1,38 @@
 :root {
-  --ink: #14171f;
-  --ink-soft: #4b5162;
-  --ink-faint: #7a8195;
-  --line: #e2e5ec;
+  --ink: #241d16;
+  --ink-soft: #5d5246;
+  --ink-faint: #8c8072;
+  --line: #e6ddce;
   --panel: #ffffff;
-  --paper: #f7f8fb;
+  --paper: #faf6ee;
 
-  --accent: #3757e8;
-  --accent-2: #6d8bff;
-  --accent-hover: #2c46c4;
-  --accent-soft: #eaefff;
-  --accent-line: #c9d4ff;
+  --accent: #c2410c;
+  --accent-2: #9a3412;
+  --accent-hover: #9a3412;
+  --accent-soft: #fdead9;
+  --accent-line: #f0c9a3;
 
-  --shadow-md: 0 10px 28px rgba(20, 23, 31, 0.08), 0 2px 6px rgba(20, 23, 31, 0.05);
-  --shadow-lg: 0 24px 60px rgba(20, 23, 31, 0.12), 0 4px 12px rgba(20, 23, 31, 0.06);
-  --radius: 14px;
-  --radius-sm: 9px;
+  --shadow-md: 0 10px 28px rgba(36, 29, 22, 0.08), 0 2px 6px rgba(36, 29, 22, 0.05);
+  --shadow-lg: 0 24px 60px rgba(36, 29, 22, 0.12), 0 4px 12px rgba(36, 29, 22, 0.06);
+  --radius: 10px;
+  --radius-sm: 7px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --ink: #eef0f5;
-    --ink-soft: #b6bccc;
-    --ink-faint: #8d94a8;
-    --line: #262a36;
-    --panel: #1a1d27;
-    --paper: #101219;
+    --ink: #f3ece1;
+    --ink-soft: #c9bdac;
+    --ink-faint: #998c7a;
+    --line: #332a20;
+    --panel: #1e1812;
+    --paper: #15110d;
 
-    --accent: #5b7bff;
-    --accent-2: #8fa4ff;
-    --accent-hover: #7691ff;
-    --accent-soft: #1c2340;
-    --accent-line: #33406e;
+    --accent: #ed7e3e;
+    --accent-2: #e2672a;
+    --accent-hover: #f39358;
+    --accent-soft: #33220f;
+    --accent-line: #5a3a1c;
   }
 }
 
@@ -106,7 +106,7 @@ a {
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  background: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -165,7 +165,7 @@ a {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  background: var(--accent);
   border-color: transparent;
   color: #fff;
   box-shadow: 0 1px 2px rgba(55, 87, 232, 0.15), 0 8px 20px rgba(55, 87, 232, 0.25);
@@ -231,7 +231,7 @@ a {
 }
 
 .hero-title .accent-text {
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  background: var(--accent);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -282,7 +282,7 @@ a {
   align-items: center;
   gap: 10px;
   padding: 14px 16px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  background: var(--accent);
   color: #fff;
   font-weight: 700;
   font-size: 13.5px;
@@ -320,7 +320,7 @@ a {
 
 .bubble-user {
   align-self: flex-end;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  background: var(--accent);
   color: #fff;
   border-bottom-right-radius: 4px;
 }
@@ -345,7 +345,7 @@ a {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  background: var(--accent);
   flex-shrink: 0;
 }
 
@@ -465,7 +465,7 @@ a {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  background: var(--accent);
   color: #fff;
   font-weight: 800;
   font-size: 15px;
@@ -491,7 +491,7 @@ a {
 
 .cta-band {
   border-radius: 24px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  background: var(--accent);
   padding: 56px 48px;
   text-align: center;
   color: #fff;

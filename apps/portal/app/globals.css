@@ -1,18 +1,18 @@
 :root {
-  --ink: #14171f;
-  --ink-soft: #4b5162;
-  --ink-faint: #7a8195;
-  --line: #e2e5ec;
-  --line-strong: #ccd1dd;
+  --ink: #241d16;
+  --ink-soft: #5d5246;
+  --ink-faint: #8c8072;
+  --line: #e6ddce;
+  --line-strong: #d3c6b0;
   --panel: #ffffff;
-  --panel-hover: #f6f8fc;
-  --paper: #f3f5f9;
+  --panel-hover: #faf5ec;
+  --paper: #f6f1e7;
 
-  --accent: #3757e8;
-  --accent-2: #6d8bff;
-  --accent-hover: #2c46c4;
-  --accent-soft: #eaefff;
-  --accent-line: #c9d4ff;
+  --accent: #c2410c;
+  --accent-2: #9a3412;
+  --accent-hover: #9a3412;
+  --accent-soft: #fdead9;
+  --accent-line: #f0c9a3;
 
   --ok: #157a52;
   --ok-soft: #e2f5ec;
@@ -22,12 +22,12 @@
   --stop-hover: #a32c2c;
   --stop-soft: #fbe9e8;
 
-  --sidebar-bg: #12141c;
-  --sidebar-bg-raised: #191c27;
-  --sidebar-text: #9aa0b4;
+  --sidebar-bg: #1c1712;
+  --sidebar-bg-raised: #272019;
+  --sidebar-text: #b3a693;
   --sidebar-text-active: #ffffff;
   --sidebar-line: rgba(255, 255, 255, 0.07);
-  --sidebar-active-bg: linear-gradient(135deg, var(--accent), var(--accent-2));
+  --sidebar-active-bg: var(--accent);
 
   --shadow-sm: 0 1px 2px rgba(20, 23, 31, 0.05);
   --shadow-md: 0 10px 28px rgba(20, 23, 31, 0.08), 0 2px 6px rgba(20, 23, 31, 0.05);
@@ -43,20 +43,20 @@
    localStorage) wins; with no explicit choice, follow the OS preference. */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --ink: #eef0f5;
-  --ink-soft: #b6bccc;
-  --ink-faint: #8d94a8;
-  --line: #2a2e3a;
-  --line-strong: #383d4c;
-  --panel: #1b1e28;
-  --panel-hover: #232733;
-  --paper: #14161e;
+  --ink: #f3ece1;
+  --ink-soft: #c9bdac;
+  --ink-faint: #998c7a;
+  --line: #332a20;
+  --line-strong: #453824;
+  --panel: #1e1812;
+  --panel-hover: #272019;
+  --paper: #15110d;
 
-  --accent: #5b7bff;
-  --accent-2: #8fa4ff;
-  --accent-hover: #7691ff;
-  --accent-soft: #1c2340;
-  --accent-line: #33406e;
+  --accent: #ed7e3e;
+  --accent-2: #e2672a;
+  --accent-hover: #f39358;
+  --accent-soft: #33220f;
+  --accent-line: #5a3a1c;
 
   --ok: #3fbf8f;
   --ok-soft: #113328;
@@ -69,20 +69,20 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --ink: #eef0f5;
-    --ink-soft: #b6bccc;
-    --ink-faint: #8d94a8;
-    --line: #2a2e3a;
-    --line-strong: #383d4c;
-    --panel: #1b1e28;
-    --panel-hover: #232733;
-    --paper: #14161e;
+    --ink: #f3ece1;
+    --ink-soft: #c9bdac;
+    --ink-faint: #998c7a;
+    --line: #332a20;
+    --line-strong: #453824;
+    --panel: #1e1812;
+    --panel-hover: #272019;
+    --paper: #15110d;
 
-    --accent: #5b7bff;
-    --accent-2: #8fa4ff;
-    --accent-hover: #7691ff;
-    --accent-soft: #1c2340;
-    --accent-line: #33406e;
+    --accent: #ed7e3e;
+    --accent-2: #e2672a;
+    --accent-hover: #f39358;
+    --accent-soft: #33220f;
+    --accent-line: #5a3a1c;
 
     --ok: #3fbf8f;
     --ok-soft: #113328;
@@ -218,15 +218,15 @@ button {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  background: var(--accent);
   border-color: transparent;
   color: #fff;
-  box-shadow: 0 1px 2px rgba(55, 87, 232, 0.15), 0 4px 12px rgba(55, 87, 232, 0.18);
+  box-shadow: 0 1px 2px rgba(194, 65, 12, 0.15), 0 4px 12px rgba(194, 65, 12, 0.18);
 }
 
 .btn-primary:hover:not(:disabled) {
   filter: brightness(1.06);
-  box-shadow: 0 2px 4px rgba(55, 87, 232, 0.2), 0 8px 20px rgba(55, 87, 232, 0.26);
+  box-shadow: 0 2px 4px rgba(194, 65, 12, 0.2), 0 8px 20px rgba(194, 65, 12, 0.26);
   transform: translateY(-1px);
 }
 
@@ -433,12 +433,12 @@ button:focus-visible {
   width: 26px;
   height: 26px;
   border-radius: 8px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  background: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(55, 87, 232, 0.35);
+  box-shadow: 0 2px 8px rgba(194, 65, 12, 0.35);
 }
 
 .app-sidebar-brand-name {
@@ -489,7 +489,7 @@ button:focus-visible {
 .nav-link.active {
   background: var(--sidebar-active-bg);
   color: var(--sidebar-text-active);
-  box-shadow: 0 4px 14px rgba(55, 87, 232, 0.35);
+  box-shadow: 0 4px 14px rgba(194, 65, 12, 0.35);
 }
 
 .nav-link.active svg {
@@ -1218,4 +1218,64 @@ body:has(.pf-embed) {
   width: auto;
   field-sizing: content;
   min-width: 8ch;
+}
+
+/* ───────────────────────── Auth split screen ───────────────────────── */
+
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.auth-panel {
+  background: var(--paper);
+  border-right: 1px solid var(--line);
+  padding: 56px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.auth-art {
+  width: 100%;
+  max-width: 340px;
+  margin-bottom: 36px;
+}
+
+.auth-panel-title {
+  font-size: 26px;
+  font-weight: 750;
+  letter-spacing: -0.015em;
+  max-width: 380px;
+  margin: 0 0 14px;
+}
+
+.auth-panel-text {
+  color: var(--ink-soft);
+  font-size: 14.5px;
+  line-height: 1.6;
+  max-width: 380px;
+}
+
+.auth-form-side {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.auth-form-wrap {
+  width: 100%;
+  max-width: 360px;
+}
+
+@media (max-width: 860px) {
+  .auth-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-panel {
+    display: none;
+  }
 }
