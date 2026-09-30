@@ -30,9 +30,16 @@ pnpm test          # vitest across the workspace (needs Postgres + Redis running
 pnpm db:studio     # Prisma Studio GUI
 ```
 
-Ports once `pnpm dev` is running: `api` on `:4000`, `widget` (Vite) on `:5173`, `portal` on `:3001`,
-`admin` on `:3002`. (Portal defaults to 3001, not 3000 — a common local dev collision with other
-projects; change it in `apps/portal/package.json` if you'd rather free up 3000.)
+Ports once `pnpm dev` is running: `landing` (marketing site) on `:3000`, `api` on `:4000`, `widget`
+(Vite) on `:5173`, `portal` on `:3001`, `admin` on `:3002`.
+
+### Marketing site (`apps/landing`)
+
+A standalone, static Next.js site — no database or API calls, just the product pitch and links into
+the portal's `/register` and `/login`. It reads `NEXT_PUBLIC_PORTAL_URL` (defaults to
+`http://localhost:3001`) to build those links; set it to the portal's real deployed URL in
+production. Deploy it as its own Vercel/static project with `apps/landing` as the root directory —
+it has no dependency on the API being reachable.
 
 ## Try it locally
 
