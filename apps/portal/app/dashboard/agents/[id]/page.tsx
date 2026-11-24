@@ -4,10 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import type { Agent } from "@envoy/sdk";
-import type { WidgetConfig } from "@envoy/types";
+import type { AgentSpec, WidgetConfig } from "@envoy/types";
 import type { Form } from "@envoy/sdk";
 import { WidgetSettings } from "../../../../components/widget/WidgetSettings";
 import { RequiredFieldsBuilder } from "../../../../components/agent/RequiredFieldsBuilder";
+import { AgentBehaviorEditor } from "../../../../components/agent/AgentBehaviorEditor";
+import { VersionHistory } from "../../../../components/agent/VersionHistory";
 import { newId } from "@envoy/builder";
 import type { FieldRow } from "../../../../lib/agent-fields";
 import { api } from "../../../../lib/api";
@@ -35,6 +37,7 @@ export default function AgentDetailPage() {
   const [fields, setFields] = useState<FieldRow[]>([]);
   const [rules, setRules] = useState<RuleRow[]>([]);
   const [widgetConfig, setWidgetConfig] = useState<WidgetConfig | null>(null);
+  const [spec, setSpec] = useState<AgentSpec | null>(null);
   const [leadFormId, setLeadFormId] = useState<string | null>(null);
   const [forms, setForms] = useState<Form[]>([]);
 
@@ -69,6 +72,7 @@ export default function AgentDetailPage() {
         );
         setRules(a.hardRules.map((r) => ({ id: r.id, text: r.text, action: r.action })));
         setWidgetConfig(a.widgetConfig);
+        setSpec(a.spec);
         setLeadFormId(a.leadFormId);
       })
       .catch((err) => setError(errorMessage(err)));
@@ -123,6 +127,7 @@ export default function AgentDetailPage() {
           })),
         hardRules: rules.filter((r) => r.text).map((r) => ({ ...r, severity: "high" })),
         widgetConfig: widgetConfig ?? undefined,
+        spec: spec ?? undefined,
         leadFormId,
       });
       setAgent(updated);
@@ -261,6 +266,8 @@ export default function AgentDetailPage() {
           ))}
         </div>
 
+        {spec && <AgentBehaviorEditor spec={spec} onChange={setSpec} />}
+
         {widgetConfig && (
           <WidgetSettings
             config={widgetConfig}
@@ -275,6 +282,26 @@ export default function AgentDetailPage() {
           {saving ? "Saving…" : "Save changes"}
         </button>
       </form>
+
+      <div style={{ marginTop: 24 }}>
+        <VersionHistory
+          agent={agent}
+          onRestored={(restored) => {
+            setAgent(restored);
+            setSpec(restored.spec);
+            setScript(restored.script);
+            setWidgetConfig(restored.widgetConfig);
+            setFields(
+              restored.requiredFields.map((f) => ({
+                id: newId("fld"), key: f.key, label: f.label, type: f.type, required: f.required,
+                prompt: f.prompt ?? "", options: f.options ?? [],
+              })),
+            );
+            setRules(restored.hardRules.map((r) => ({ id: r.id, text: r.text, action: r.action })));
+            showToast(`Restored — now on v${restored.version}.`);
+          }}
+        />
+      </div>
     </div>
   );
 }

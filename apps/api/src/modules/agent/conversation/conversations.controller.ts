@@ -74,6 +74,12 @@ export class ConversationsController {
     return this.conversations.getStats(user.tenantId!, agentId);
   }
 
+  @Get(":id/trace")
+  @UseGuards(JwtAuthGuard, TenantScopeGuard, TenantLockGuard)
+  getTrace(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
+    return this.conversations.getTrace(user.tenantId!, id);
+  }
+
   @Get(":id")
   @UseGuards(JwtAuthGuard, TenantScopeGuard, TenantLockGuard)
   findOne(@CurrentUser() user: JwtPayload, @Param("id") id: string) {

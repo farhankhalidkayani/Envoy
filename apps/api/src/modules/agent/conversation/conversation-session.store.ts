@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { RedisService } from "../../core/redis/redis.service.js";
+import type { GoalProgressMap } from "@envoy/types";
 import type { LlmMessage } from "../providers/llm/types.js";
 
 const SESSION_TTL_SECONDS = 60 * 60 * 2; // 2h — generous for an active chat session
@@ -7,6 +8,13 @@ const SESSION_TTL_SECONDS = 60 * 60 * 2; // 2h — generous for an active chat s
 export interface ConversationSessionState {
   history: LlmMessage[];
   capturedData: Record<string, unknown>;
+  /** Agentic-runtime state; absent for classic agents and for sessions started before these fields existed. */
+  goalProgress?: GoalProgressMap;
+  toolCallCounts?: Record<string, number>;
+  /** Number of visitor turns completed so far. */
+  turn?: number;
+  /** Next run-trace sequence number. */
+  stepSeq?: number;
 }
 
 /**
@@ -53,6 +61,11 @@ export class ConversationSessionStore {
     const state = (await this.get(conversationId)) ?? { history: [], capturedData: {} };
     state.capturedData = capturedData;
     await this.write(conversationId, state);
+  }
+
+  async patch(conversationId: string, partial: Partial<ConversationSessionState>): Promise<void> {
+    const state = (await this.get(conversationId)) ?? { history: [], capturedData: {} };
+    await this.write(conversationId, { ...state, ...partial });
   }
 
   async clear(conversationId: string): Promise<void> {

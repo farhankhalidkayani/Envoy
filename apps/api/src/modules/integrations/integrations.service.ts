@@ -7,6 +7,7 @@ import { sanitizeCapturedData } from "../core/common/sanitize-captured-data.js";
 import { AuditService } from "../core/audit/audit.service.js";
 import { decryptToken, encryptToken } from "../crm/token-crypto.js";
 import { NEVER_EXPIRES, packTokens, refreshIfExpiring, tokensFromGrant, unpackTokens } from "../core/common/oauth-tokens.js";
+import { CalendarClient, type BusyInterval, type CalendarResult } from "./calendar.client.js";
 import { CalendarSender } from "./senders/calendar.sender.js";
 import { EmailSender } from "./senders/email.sender.js";
 import { WebhookSender } from "./senders/webhook.sender.js";
@@ -27,6 +28,7 @@ export class IntegrationsService {
     private readonly webhookSender: WebhookSender,
     private readonly emailSender: EmailSender,
     private readonly calendarSender: CalendarSender,
+    private readonly calendarClient: CalendarClient,
   ) {}
 
   async getConnections(tenantId: string) {
@@ -159,6 +161,58 @@ export class IntegrationsService {
       data: { oauthTokens: encryptToken(packTokens(refreshed)) },
     });
     return refreshed.accessToken;
+  }
+
+  /** The tenant's connected, enabled calendar plus a live token, or null. Used by the agent runtime's calendar tools. */
+  private async calendarAccess(tenantId: string) {
+    const integration = await this.getConnection(tenantId, "calendar");
+    if (!integration?.enabled) return null;
+    const config = integration.config as unknown as CalendarConfig;
+    return {
+      accessToken: await this.getFreshCalendarAccessToken(integration),
+      calendarId: config.calendarId ?? "primary",
+      defaultDurationMinutes: config.durationMinutes ?? 30,
+      defaultTitle: config.titleTemplate,
+    };
+  }
+
+  async hasCalendar(tenantId: string): Promise<boolean> {
+    return (await this.getConnection(tenantId, "calendar"))?.enabled === true;
+  }
+
+  async getBusyIntervals(tenantId: string, from: Date, to: Date): Promise<CalendarResult<{ busy: BusyInterval[] }>> {
+    try {
+      const access = await this.calendarAccess(tenantId);
+      if (!access) return { success: false, error: "Calendar is not connected" };
+      return await this.calendarClient.freeBusy(access.accessToken, access.calendarId, from, to);
+    } catch (err) {
+      return { success: false, error: (err as Error).message };
+    }
+  }
+
+  /** Books a slot after re-checking it is free (the model's idea of "free" is never trusted). */
+  async bookSlot(
+    tenantId: string,
+    req: { start: Date; durationMinutes?: number; title?: string; description?: string; attendeeEmail?: string },
+  ): Promise<CalendarResult<{ eventId: string; link?: string; start: string; end: string }>> {
+    try {
+      const access = await this.calendarAccess(tenantId);
+      if (!access) return { success: false, error: "Calendar is not connected" };
+      const end = new Date(req.start.getTime() + (req.durationMinutes ?? access.defaultDurationMinutes) * 60_000);
+      const busy = await this.calendarClient.freeBusy(access.accessToken, access.calendarId, req.start, end);
+      if (!busy.success) return busy;
+      if (busy.busy.length > 0) return { success: false, error: "That time is no longer available. Offer the visitor another slot." };
+      const created = await this.calendarClient.createEvent(access.accessToken, access.calendarId, {
+        title: req.title ?? access.defaultTitle,
+        description: req.description,
+        start: req.start,
+        end,
+        attendeeEmail: req.attendeeEmail,
+      });
+      return created.success ? { ...created, start: req.start.toISOString(), end: end.toISOString() } : created;
+    } catch (err) {
+      return { success: false, error: (err as Error).message };
+    }
   }
 
   async updateConfig(tenantId: string, type: IntegrationType, config: Record<string, unknown>) {

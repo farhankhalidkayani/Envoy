@@ -2,6 +2,7 @@ import type { IncomingMessage, Server as HttpServer } from "node:http";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { WebSocket, WebSocketServer } from "ws";
 import {
+  AgentSpec,
   ClientMessage,
   HardRulesSpec,
   RequiredFieldsSpec,
@@ -20,6 +21,7 @@ const WS_PATH_PATTERN = /^\/ws\/agent\/([^/?]+)/;
 
 interface ConnectionState {
   conversationId?: string;
+  tenantId?: string;
   agentConfig?: AgentPromptConfig;
 }
 
@@ -153,14 +155,17 @@ export class AgentGateway {
       return;
     }
 
-    const conversation = await this.conversations.start(agent.id, agent.tenantId);
+    const conversation = await this.conversations.start(agent.id, agent.tenantId, agent.version);
     await this.sessions.init(conversation.id);
 
     state.conversationId = conversation.id;
+    state.tenantId = agent.tenantId;
     state.agentConfig = {
       script: agent.script,
       requiredFields: RequiredFieldsSpec.parse(agent.requiredFields ?? []),
       hardRules: HardRulesSpec.parse(agent.hardRules ?? []),
+      spec: AgentSpec.parse(agent.spec ?? {}),
+      agentVersion: agent.version,
     };
 
     this.send(ws, {
@@ -201,13 +206,14 @@ export class AgentGateway {
     state: ConnectionState,
     text: string,
   ): Promise<string | undefined> {
-    if (!state.conversationId || !state.agentConfig) {
+    if (!state.conversationId || !state.tenantId || !state.agentConfig) {
       this.send(ws, { type: "error", message: "Session not started" });
       return undefined;
     }
 
     const result = await this.engine.handleUserMessage({
       conversationId: state.conversationId,
+      tenantId: state.tenantId,
       config: state.agentConfig,
       userText: text,
     });
@@ -221,6 +227,7 @@ export class AgentGateway {
         outcomeType: result.outcomeType,
         capturedData: result.capturedData,
         history,
+        handoffReason: result.handoffReason,
       });
       this.send(ws, {
         type: "session.completed",

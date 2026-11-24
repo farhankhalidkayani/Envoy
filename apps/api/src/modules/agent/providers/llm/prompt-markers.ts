@@ -1,4 +1,4 @@
-import type { RequiredFieldsSpec } from "@envoy/types";
+import type { GoalDef, GoalProgressMap, RequiredFieldsSpec } from "@envoy/types";
 
 /**
  * Delimited, machine-parseable blocks embedded in prompts alongside the
@@ -41,3 +41,34 @@ export function stripCompletionMarker(text: string): { visibleText: string; outc
   const visibleText = (text.slice(0, start) + text.slice(end + COMPLETE_MARKER_SUFFIX.length)).trim();
   return { visibleText, outcomeType: match?.[1] };
 }
+
+// ── Agentic-runtime blocks (same idea: real models read the prose, the mock parses these) ──
+
+const CAPTURED_START = "<<CAPTURED_DATA>>";
+const CAPTURED_END = "<<END_CAPTURED_DATA>>";
+const GOALS_START = "<<AGENT_GOALS>>";
+const GOALS_END = "<<END_AGENT_GOALS>>";
+const GOAL_PROGRESS_START = "<<GOAL_PROGRESS>>";
+const GOAL_PROGRESS_END = "<<END_GOAL_PROGRESS>>";
+
+function embed<T>(start: string, end: string, value: T): string {
+  return `${start}\n${JSON.stringify(value)}\n${end}`;
+}
+
+function extract<T>(text: string, start: string, end: string): T | null {
+  const a = text.indexOf(start);
+  const b = text.indexOf(end);
+  if (a === -1 || b === -1 || b <= a) return null;
+  try {
+    return JSON.parse(text.slice(a + start.length, b).trim()) as T;
+  } catch {
+    return null;
+  }
+}
+
+export const embedCapturedData = (data: Record<string, unknown>) => embed(CAPTURED_START, CAPTURED_END, data);
+export const extractCapturedData = (text: string) => extract<Record<string, unknown>>(text, CAPTURED_START, CAPTURED_END);
+export const embedGoals = (goals: GoalDef[]) => embed(GOALS_START, GOALS_END, goals);
+export const extractGoals = (text: string) => extract<GoalDef[]>(text, GOALS_START, GOALS_END);
+export const embedGoalProgress = (p: GoalProgressMap) => embed(GOAL_PROGRESS_START, GOAL_PROGRESS_END, p);
+export const extractGoalProgress = (text: string) => extract<GoalProgressMap>(text, GOAL_PROGRESS_START, GOAL_PROGRESS_END);

@@ -6,3 +6,4 @@ export * from "./widget-config.js";
 export * from "./price-config.js";
 export * from "./ws.js";
 export * from "./form-schema.js";
+export * from "./agent-spec.js";

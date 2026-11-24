@@ -7,6 +7,7 @@ import type { Conversation } from "@envoy/sdk";
 import { api } from "../../../../lib/api";
 import { errorMessage } from "../../../../lib/errors";
 import { useToast } from "../../../../components/Toast";
+import { RunTrace } from "../../../../components/agent/RunTrace";
 
 const INTEGRATION_LABELS = { webhook: "Webhook", email: "Email", calendar: "Calendar" } as const;
 
@@ -70,7 +71,28 @@ export default function ConversationDetailPage() {
       <p style={{ color: "var(--ink-faint)", fontSize: 12.5, marginBottom: 20 }}>
         {new Date(conversation.createdAt).toLocaleString()} · {conversation.status}
         {conversation.outcomeType ? ` · ${conversation.outcomeType}` : ""}
+        {conversation.agentVersion ? ` · agent v${conversation.agentVersion}` : ""}
       </p>
+
+      {conversation.handoffReason && (
+        <div className="card" style={{ marginBottom: 16, borderColor: "var(--warn)" }}>
+          <strong style={{ fontSize: 13.5, display: "block", marginBottom: 4 }}>Handed off to a human</strong>
+          <p style={{ fontSize: 12.5 }}>{conversation.handoffReason}</p>
+        </div>
+      )}
+
+      {Object.keys(conversation.goalProgress ?? {}).length > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <strong style={{ fontSize: 13.5, display: "block", marginBottom: 8 }}>Goals</strong>
+          {Object.entries(conversation.goalProgress).map(([id, p]) => (
+            <div key={id} style={{ display: "flex", gap: 8, fontSize: 12.5, marginBottom: 4, alignItems: "baseline" }}>
+              <span className={`pill ${p.status === "achieved" ? "pill-ok" : p.status === "failed" ? "pill-stop" : "pill-gray"}`}>{p.status.replace("_", " ")}</span>
+              <code>{id}</code>
+              {p.note && <span style={{ color: "var(--ink-faint)" }}>{p.note}</span>}
+            </div>
+          ))}
+        </div>
+      )}
 
       {conversation.ruleViolationsBlocked.length > 0 && (
         <div className="card" style={{ marginBottom: 16, borderColor: "var(--stop)" }}>
@@ -174,6 +196,8 @@ export default function ConversationDetailPage() {
           </p>
         </div>
       )}
+
+      <RunTrace conversationId={conversation.id} />
 
       <div className="card">
         <strong style={{ fontSize: 13.5, display: "block", marginBottom: 8 }}>Transcript</strong>

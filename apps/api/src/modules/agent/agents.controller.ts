@@ -1,6 +1,6 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, UseGuards } from "@nestjs/common";
 import { z } from "zod";
-import { AgentStatus, HardRulesSpec, RequiredFieldsSpec, WidgetConfig } from "@envoy/types";
+import { AgentSpec, AgentStatus, HardRulesSpec, RequiredFieldsSpec, WidgetConfig } from "@envoy/types";
 import { CurrentUser } from "../core/auth/decorators/current-user.decorator.js";
 import { FeatureGuard } from "../core/auth/guards/feature.guard.js";
 import { JwtAuthGuard } from "../core/auth/guards/jwt-auth.guard.js";
@@ -16,9 +16,13 @@ const CreateAgentDto = z.object({
   requiredFields: RequiredFieldsSpec.optional(),
   hardRules: HardRulesSpec.optional(),
   widgetConfig: WidgetConfig.partial().optional(),
+  spec: AgentSpec.optional(),
 });
 
-const UpdateOnlyDto = z.object({ leadFormId: z.string().nullable().optional() });
+const UpdateOnlyDto = z.object({
+  leadFormId: z.string().nullable().optional(),
+  note: z.string().max(200).optional(),
+});
 
 const UpdateAgentDto = CreateAgentDto.partial().merge(UpdateOnlyDto).extend({
   status: AgentStatus.optional(),
@@ -45,6 +49,16 @@ export class AgentsController {
   @Get(":id")
   findOne(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
     return this.agents.findOneScoped(user.tenantId!, id);
+  }
+
+  @Get(":id/versions")
+  versions(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
+    return this.agents.listVersions(user.tenantId!, id);
+  }
+
+  @Post(":id/versions/:version/restore")
+  restore(@CurrentUser() user: JwtPayload, @Param("id") id: string, @Param("version", ParseIntPipe) version: number) {
+    return this.agents.restoreVersion(user.tenantId!, id, version);
   }
 
   @Patch(":id")

@@ -1,4 +1,4 @@
-import type { HardRulesSpec, RequiredFieldsSpec } from "@envoy/types";
+import type { AgentSpec, HardRulesSpec, RequiredFieldsSpec } from "@envoy/types";
 import { embedRequiredFields } from "../providers/llm/prompt-markers.js";
 import type { LlmMessage } from "../providers/llm/types.js";
 
@@ -6,6 +6,10 @@ export interface AgentPromptConfig {
   script: string;
   requiredFields: RequiredFieldsSpec;
   hardRules: HardRulesSpec;
+  /** Agentic half of the config. Absent / mode "classic" = the original single-completion turn. */
+  spec?: AgentSpec;
+  /** Which AgentVersion this session runs on (recorded on the conversation). */
+  agentVersion?: number;
 }
 
 /**

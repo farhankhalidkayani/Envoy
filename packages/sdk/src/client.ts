@@ -1,8 +1,9 @@
-import type { ApiOptionsSource, FeatureAccess, FormOption, FormSchema, PriceConfig } from "@envoy/types";
+import type { AgentSpec, ApiOptionsSource, FeatureAccess, FormOption, FormSchema, PriceConfig } from "@envoy/types";
 import type {
   AdminTenant,
   AdminTenantDetail,
   Agent,
+  AgentVersion,
   AuditLogEntry,
   AuthResult,
   BillingUsage,
@@ -15,6 +16,7 @@ import type {
   Integration,
   Lead,
   PublicForm,
+  RunStep,
   Subscription,
   WebhookIntegrationConfig,
 } from "./types";
@@ -35,6 +37,9 @@ export interface CreateAgentInput {
   requiredFields?: unknown;
   hardRules?: unknown;
   widgetConfig?: unknown;
+  spec?: AgentSpec;
+  /** Label stored on the version this edit creates. */
+  note?: string;
 }
 
 export interface ApiClientConfig {
@@ -166,6 +171,9 @@ export function createApiClient(config: ApiClientConfig) {
         id: string,
         input: Partial<CreateAgentInput> & { status?: Agent["status"]; leadFormId?: string | null },
       ) => request<Agent>(`/agents/${id}`, { method: "PATCH", body: input }),
+      versions: (id: string) => request<AgentVersion[]>(`/agents/${id}/versions`),
+      restoreVersion: (id: string, version: number) =>
+        request<Agent>(`/agents/${id}/versions/${version}/restore`, { method: "POST" }),
     },
 
     conversations: {
@@ -174,6 +182,7 @@ export function createApiClient(config: ApiClientConfig) {
           query: { agentId, cursor: opts.cursor, take: opts.take?.toString() },
         }),
       get: (id: string) => request<Conversation>(`/conversations/${id}`),
+      trace: (id: string) => request<RunStep[]>(`/conversations/${id}/trace`),
       getStats: (agentId?: string) =>
         request<{ total: number; completed: number }>("/conversations/stats", { query: { agentId } }),
     },

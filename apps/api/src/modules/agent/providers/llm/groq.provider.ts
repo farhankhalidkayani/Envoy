@@ -1,7 +1,15 @@
 import { Injectable } from "@nestjs/common";
 import type { HardRuleDef } from "@envoy/types";
 import { buildJudgeMessages, parseJudgeResponse } from "./judge-prompt.js";
-import type { JudgeVerdict, LlmCompleteRequest, LlmCompleteResult, LlmProvider } from "./types.js";
+import { parseOpenAiToolResponse, toOpenAiMessages, toOpenAiTools } from "./tool-wire.js";
+import type {
+  JudgeVerdict,
+  LlmCompleteRequest,
+  LlmCompleteResult,
+  LlmProvider,
+  LlmToolRequest,
+  LlmToolResult,
+} from "./types.js";
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 // llama-3.3-70b-versatile was retired from Groq's catalog; openai/gpt-oss-120b
@@ -35,6 +43,26 @@ export class GroqLlmProvider implements LlmProvider {
       choices: Array<{ message: { content: string } }>;
     };
     return { text: data.choices[0]?.message.content ?? "" };
+  }
+
+  async completeWithTools(req: LlmToolRequest): Promise<LlmToolResult> {
+    const response = await fetch(GROQ_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.model,
+        messages: toOpenAiMessages(req.messages),
+        ...(req.tools.length > 0 ? { tools: toOpenAiTools(req.tools), tool_choice: "auto" } : {}),
+        max_tokens: req.maxTokens ?? 800,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(`Groq API error ${response.status}: ${await response.text()}`);
+    }
+    return parseOpenAiToolResponse((await response.json()) as Parameters<typeof parseOpenAiToolResponse>[0]);
   }
 
   async judge(candidateText: string, hardRules: HardRuleDef[]): Promise<JudgeVerdict> {

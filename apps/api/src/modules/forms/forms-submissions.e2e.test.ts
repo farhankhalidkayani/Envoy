@@ -76,7 +76,7 @@ describe("form submissions management (e2e)", () => {
         body: JSON.stringify({ email: `lead${i}@example.com` }),
       });
     }
-  }, 20000);
+  }, 60000);
 
   afterAll(async () => {
     await prisma.tenant.deleteMany({ where: { id: tenantId } });

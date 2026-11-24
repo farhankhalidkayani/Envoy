@@ -166,6 +166,11 @@ model Agent {
   requiredFields Json        @default("[]")
   hardRules      Json        @default("[]")
   widgetConfig   Json        @default("{}")
+  /// Agentic half of the config (goals, tools, runtime limits) — AgentSpec in @envoy/types.
+  /// "{}" parses to the classic runtime, so agents created before this column are unchanged.
+  spec           Json        @default("{}")
+  /// Current config version number; every config change snapshots an AgentVersion row.
+  version        Int         @default(1)
   publicToken    String      @unique @default(cuid())
   /// Optional lead form the widget can embed inline (see PublicAgentsController) — must
   /// belong to the same tenant and be status="live" to actually surface to visitors.
@@ -175,10 +180,28 @@ model Agent {
   updatedAt      DateTime    @updatedAt
 
   conversations Conversation[]
+  versions      AgentVersion[]
 
   @@index([tenantId])
   @@index([leadFormId])
   @@map("agents")
+}
+
+/// Immutable snapshot of an agent's whole configuration at one version.
+model AgentVersion {
+  id        String   @id @default(cuid())
+  agentId   String
+  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  tenantId  String
+  version   Int
+  /// { script, requiredFields, hardRules, widgetConfig, spec }
+  snapshot  Json
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@unique([agentId, version])
+  @@index([tenantId])
+  @@map("agent_versions")
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -202,6 +225,12 @@ model Conversation {
   aiSummaryError        String?
   ruleViolationsBlocked Json                @default("[]")
   recordingUrl          String?
+  /// Which AgentVersion this conversation ran on.
+  agentVersion          Int?
+  /// { [goalId]: { status, note?, updatedAt } } — filled by the agent loop's update_goal tool.
+  goalProgress          Json                @default("{}")
+  /// Set when the agent handed the visitor to a human (handoff_to_human tool).
+  handoffReason         String?
   crmPushedAt           DateTime?
   crmExternalId         String?
   crmPushError          String?
@@ -209,9 +238,43 @@ model Conversation {
   createdAt             DateTime            @default(now())
   completedAt           DateTime?
 
+  runSteps AgentRunStep[]
+
   @@index([tenantId])
   @@index([agentId])
   @@map("conversations")
+}
+
+enum RunStepKind {
+  model
+  tool
+  judge
+  extract
+  limit
+}
+
+/// One step of an agent run: a model call, tool execution, judge verdict, etc.
+/// The trace the portal's run viewer (and later the evaluation harness) reads.
+model AgentRunStep {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  tenantId       String
+  /// 1-based visitor turn within the conversation.
+  turn           Int
+  /// Order within the whole conversation (monotonic), so the trace sorts without ambiguity.
+  seq            Int
+  kind           RunStepKind
+  name           String
+  input          Json?
+  output         Json?
+  error          String?
+  latencyMs      Int?
+  createdAt      DateTime     @default(now())
+
+  @@unique([conversationId, seq])
+  @@index([tenantId])
+  @@map("agent_run_steps")
 }
 
 // ─────────────────────────────────────────────────────────────

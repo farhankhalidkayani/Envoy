@@ -18,5 +18,9 @@ export default defineConfig({
     // /auth/login calls. Sequential files trade some wall-clock time for
     // not having to make every piece of shared state parallel-safe.
     fileParallelism: false,
+    // These e2e suites do dozens of sequential DB round-trips per test; the 5s default
+    // only holds against a localhost Postgres and flakes against a remote one.
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
   },
 });

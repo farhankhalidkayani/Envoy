@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { CrmProvider, CrmPushResult } from "./types.js";
+import type { CrmLookupResult, CrmProvider, CrmPushResult } from "./types.js";
 
 const HUBSPOT_CONTACTS_URL = "https://api.hubapi.com/crm/v3/objects/contacts";
 
@@ -35,5 +35,28 @@ export class HubSpotCrmProvider implements CrmProvider {
     const data = (await response.json()) as { id?: string; results?: Array<{ id: string }> };
     const externalId = email ? data.results?.[0]?.id : data.id;
     return externalId ? { success: true, externalId } : { success: false, error: "HubSpot returned no contact id" };
+  }
+
+  /** CRM Search API, exact match on email. Needs the crm.objects.contacts.read scope (connections made before it was requested must reconnect). */
+  async findContact(accessToken: string, email: string): Promise<CrmLookupResult> {
+    const response = await fetch(`${HUBSPOT_CONTACTS_URL}/search`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({
+        filterGroups: [{ filters: [{ propertyName: "email", operator: "EQ", value: email }] }],
+        properties: ["firstname"],
+        limit: 1,
+      }),
+    });
+    if (response.status === 403) {
+      return { success: false, error: "CRM lookup is not permitted — reconnect the CRM to grant read access" };
+    }
+    if (!response.ok) {
+      const text = await response.text().catch(() => response.statusText);
+      return { success: false, error: `HubSpot API error ${response.status}: ${text}` };
+    }
+    const data = (await response.json()) as { results?: Array<{ properties?: { firstname?: string | null } }> };
+    const hit = data.results?.[0];
+    return hit ? { success: true, found: true, firstName: hit.properties?.firstname ?? undefined } : { success: true, found: false };
   }
 }

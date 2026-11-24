@@ -422,7 +422,7 @@ pnpm dev                    # landing :3000, portal :3001, admin :3002, api :400
 - CRM supports HubSpot only (Zoho was dropped in a later migration).
 - The leads feed uses a growing `limit` instead of a true cursor across two sources.
 - **Model choice is global, not per tenant.** The LLM, STT and TTS providers are single process-wide instances picked by env vars (`LLM_PROVIDER` etc.) using the platform's own keys. Tenants cannot bring their own keys or choose a model (section 17.5).
-- **The agent is not yet truly agentic.** Each turn is one LLM completion (`ConversationEngineService.handleUserMessage`): build prompt, generate, judge, extract fields. There is no tool calling, no multi-step reasoning loop, no explicit goals or planning, no memory beyond the session history, and no per-agent model or behaviour configuration beyond script, fields and rules. Section 17.1 plans the fix.
+- **The agentic runtime is only partly built.** Agents can now run in `agentic` mode (section 17.1.0 lists what exists). Still missing: calendar and CRM tools, custom HTTP tools, knowledge/RAG, long-term memory, multi-agent routing, the scenario/evaluation harness, visitor- and staff-confirmation approval modes, and a live simulator. Classic mode (one completion per turn) remains the default and the evaluation baseline.
 
 **Future work**
 
@@ -433,6 +433,22 @@ pnpm dev                    # landing :3000, portal :3001, admin :3002, api :400
 **Where we are going.** Turn the engine into a general **agent runtime** and the portal into an **agent studio**, so a tenant can configure *what an agent is trying to achieve, what it is allowed to do, what it knows, and how it behaves*, and the platform guarantees it does so safely. The engineering focus of the project becomes the **harness**: everything around the model that makes an agent dependable (loop, tools, state, guardrails, evaluation, observability), rather than the model itself.
 
 **Principle:** *the model proposes, the harness disposes.* The LLM suggests thoughts and actions; deterministic code validates, authorises, executes, limits and records them.
+
+#### 17.1.0 Implementation status (updated 2026-11-24)
+
+**Built and tested (phases 1 and 2):**
+- `AgentSpec` in `@envoy/types`: persona, goals (primary/secondary with success criteria), per-tool permissions with per-conversation call caps, runtime limits (`maxSteps`, `maxToolCallsPerTurn`, `toolTimeoutMs`, `extractionFallback`). `runtime.mode` is `classic` (default, unchanged behaviour) or `agentic`.
+- Versioned agent configuration: every change to script, fields, rules, widget or spec snapshots an `AgentVersion`; non-config edits do not; restore creates a new version; concurrent edits are rejected; pre-versioning agents get a baseline snapshot on first edit. Each conversation records the version it ran on.
+- Provider tool calling: `completeWithTools` on the LLM interface, implemented for the deterministic mock (scripted tool-using agent), Groq (OpenAI-compatible) and Gemini. Groq and Gemini are code-complete with wire-format unit tests but not live-tested, like every real provider here.
+- Tool registry and seven built-in tools: `capture_field`, `update_goal`, `end_conversation`, `handoff_to_human`, plus the opt-in integration tools `lookup_crm_contact`, `check_calendar_availability` and `book_meeting`. The harness validates arguments, enforces permissions, per-conversation caps and timeouts, hides internal errors from the model, and refuses `end_conversation` until required fields are captured and primary goals are resolved.
+- Bounded agent loop: step and tool budgets, tools withdrawn once the conversation is ending, safe fallback replies on model failure, and the same two-layer hard-rule enforcement on the final reply as classic mode. Optional safety-net extraction pass.
+- Run trace: every model call, tool execution, judge verdict and limit hit is stored (`AgentRunStep`) and exposed at `GET /conversations/:id/trace` (tenant-scoped). Goal progress and handoff reason are stored on the conversation and passed to the completion pipeline.
+- Portal: "Agent behavior" editor (mode, persona, goals, tools with caps, limits), version history with restore, and a run-trace viewer, goal progress and handoff notice on the conversation page.
+- Tests: unit tests for the types, tool wire formats, tool registry and loop; an end-to-end WebSocket suite covering a full tool-using conversation with trace, human handoff, a disabled tool, hard-rule blocking, classic agents unaffected, spec validation, versioning, tenant scoping and the pre-versioning backfill.
+
+- Integration tools are **opt-in per agent** (off unless the tenant enables them) and only offered while the CRM or calendar is connected. Guards: a CRM lookup returns only found + first name and only for the email the visitor gave in that conversation; availability returns busy times only (no event details), max 14 days per query; booking rejects past and >90-day times, re-checks the slot is free immediately before inserting, invites only the visitor's own captured email, and is capped at 2 per conversation unless the tenant sets a different cap. Provider errors are never shown to the model. Mock mode (CRM and calendar) is deterministic; the real HubSpot search and Google freeBusy/events calls are code-complete but not live-tested, and HubSpot connections made before the read scope was added must reconnect.
+
+**Not built yet (same section's remaining phases):** a tool to create CRM records mid-conversation (the completion push already does this), `confirm`-style approval modes, the HTTP tool builder, knowledge base and memory, simulator and scenario suite, MCP client/server, BYOK model routing, workflows, and the improvement harness.
 
 #### 17.1.1 Configurable agent definition (the "agent spec")
 

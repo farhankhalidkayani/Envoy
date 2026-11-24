@@ -1,5 +1,8 @@
 import type {
+  AgentSpec,
   AgentStatus,
+  GoalProgressMap,
+  RunStepKind,
   ConversationChannel,
   ConversationStatus,
   FeatureAccess,
@@ -35,6 +38,8 @@ export interface Agent {
   requiredFields: RequiredFieldsSpec;
   hardRules: HardRulesSpec;
   widgetConfig: WidgetConfig;
+  spec: AgentSpec;
+  version: number;
   leadFormId: string | null;
   publicToken: string;
   createdAt: string;
@@ -54,6 +59,9 @@ export interface Conversation {
   aiSummaryError: string | null;
   ruleViolationsBlocked: Array<{ ruleId: string; action: string; candidateText: string; timestamp: string }>;
   recordingUrl: string | null;
+  agentVersion: number | null;
+  goalProgress: GoalProgressMap;
+  handoffReason: string | null;
   crmPushedAt: string | null;
   crmExternalId: string | null;
   crmPushError: string | null;
@@ -197,4 +205,34 @@ export interface Lead {
 export interface PublicForm {
   name: string;
   schema: PublicFormSchema;
+}
+
+export interface AgentVersion {
+  id: string;
+  agentId: string;
+  version: number;
+  note: string | null;
+  createdAt: string;
+  snapshot: {
+    script: string;
+    requiredFields: RequiredFieldsSpec;
+    hardRules: HardRulesSpec;
+    widgetConfig: WidgetConfig;
+    spec: AgentSpec;
+  };
+}
+
+/** One step of an agent run (model call, tool execution, judge verdict…) — the run trace. */
+export interface RunStep {
+  id: string;
+  conversationId: string;
+  turn: number;
+  seq: number;
+  kind: RunStepKind;
+  name: string;
+  input: unknown;
+  output: unknown;
+  error: string | null;
+  latencyMs: number | null;
+  createdAt: string;
 }

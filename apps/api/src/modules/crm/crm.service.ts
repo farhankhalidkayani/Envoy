@@ -6,13 +6,13 @@ import { consumeOAuthState, issueOAuthState } from "../core/common/oauth-state.j
 import { sanitizeCapturedData } from "../core/common/sanitize-captured-data.js";
 import { AuditService } from "../core/audit/audit.service.js";
 import { CRM_PROVIDER } from "./providers/crm-provider.module.js";
-import type { CrmProvider, CrmPushResult } from "./providers/types.js";
+import type { CrmLookupResult, CrmProvider, CrmPushResult } from "./providers/types.js";
 import { decryptToken, encryptToken } from "./token-crypto.js";
 import { NEVER_EXPIRES, packTokens, refreshIfExpiring, tokensFromGrant, unpackTokens } from "../core/common/oauth-tokens.js";
 
 const HUBSPOT_AUTHORIZE_URL = "https://app.hubspot.com/oauth/authorize";
 const HUBSPOT_TOKEN_URL = "https://api.hubapi.com/oauth/v1/token";
-const HUBSPOT_SCOPES = "crm.objects.contacts.write";
+const HUBSPOT_SCOPES = "crm.objects.contacts.write crm.objects.contacts.read";
 
 @Injectable()
 export class CrmService {
@@ -142,6 +142,18 @@ export class CrmService {
       return { success: false, error: (err as Error).message };
     }
     return this.provider.pushRecord(accessToken, mappedRecord);
+  }
+
+  /** Read-only contact lookup for the agent runtime. Never throws: failures come back as `{ success: false }`. */
+  async lookupContact(tenantId: string, email: string): Promise<CrmLookupResult> {
+    const connection = await this.getConnection(tenantId);
+    if (!connection) return { success: false, error: "Tenant has no CRM connection" };
+    try {
+      const accessToken = await this.freshAccessToken(connection.id, connection.oauthTokens);
+      return await this.provider.findContact(accessToken, email);
+    } catch (err) {
+      return { success: false, error: (err as Error).message };
+    }
   }
 
   /** Refreshes (and persists) the HubSpot token when it's about to expire. */

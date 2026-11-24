@@ -1,12 +1,15 @@
 import { Injectable } from "@nestjs/common";
 import type { HardRuleDef } from "@envoy/types";
 import { buildJudgeMessages, parseJudgeResponse } from "./judge-prompt.js";
+import { parseGeminiToolResponse, toGeminiToolShape, toGeminiTools } from "./tool-wire.js";
 import type {
   JudgeVerdict,
   LlmCompleteRequest,
   LlmCompleteResult,
   LlmMessage,
   LlmProvider,
+  LlmToolRequest,
+  LlmToolResult,
 } from "./types.js";
 
 const DEFAULT_MODEL = "gemini-2.0-flash";
@@ -44,6 +47,25 @@ export class GeminiLlmProvider implements LlmProvider {
     };
     const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
     return { text };
+  }
+
+  async completeWithTools(req: LlmToolRequest): Promise<LlmToolResult> {
+    const { systemText, contents } = toGeminiToolShape(req.messages);
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...(systemText ? { systemInstruction: { parts: [{ text: systemText }] } } : {}),
+        contents,
+        ...(req.tools.length > 0 ? { tools: toGeminiTools(req.tools) } : {}),
+        generationConfig: { maxOutputTokens: req.maxTokens ?? 800 },
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(`Gemini API error ${response.status}: ${await response.text()}`);
+    }
+    return parseGeminiToolResponse((await response.json()) as Parameters<typeof parseGeminiToolResponse>[0]);
   }
 
   async judge(candidateText: string, hardRules: HardRuleDef[]): Promise<JudgeVerdict> {

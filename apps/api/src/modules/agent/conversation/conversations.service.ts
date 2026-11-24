@@ -14,9 +14,9 @@ export class ConversationsService {
     private readonly routing: CaptureRoutingService,
   ) {}
 
-  async start(agentId: string, tenantId: string) {
+  async start(agentId: string, tenantId: string, agentVersion?: number) {
     return this.prisma.client.conversation.create({
-      data: { agentId, tenantId, channel: "chat", status: "in_progress" },
+      data: { agentId, tenantId, channel: "chat", status: "in_progress", agentVersion },
     });
   }
 
@@ -64,6 +64,7 @@ export class ConversationsService {
     outcomeType?: OutcomeType;
     capturedData: Record<string, unknown>;
     history: LlmMessage[];
+    handoffReason?: string;
   }) {
     const conversation = await this.prisma.client.conversation.update({
       where: { id: params.conversationId },
@@ -71,6 +72,7 @@ export class ConversationsService {
         status: "completed",
         outcomeType: params.outcomeType,
         capturedData: params.capturedData as Prisma.InputJsonValue,
+        handoffReason: params.handoffReason,
         completedAt: new Date(),
       },
     });
@@ -82,6 +84,15 @@ export class ConversationsService {
     await this.routing.route(conversation.tenantId, { conversationId: params.conversationId });
 
     return conversation;
+  }
+
+  /** The agent run trace for one conversation, tenant-scoped (404 for another tenant's). */
+  async getTrace(tenantId: string, conversationId: string) {
+    await this.findOneForTenant(tenantId, conversationId);
+    return this.prisma.client.agentRunStep.findMany({
+      where: { conversationId, tenantId },
+      orderBy: { seq: "asc" },
+    });
   }
 
   async abandon(conversationId: string) {

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { OutcomeType } from "@envoy/types";
+import type { GoalProgressMap, OutcomeType } from "@envoy/types";
 import { OutcomeType as OutcomeTypeSchema } from "@envoy/types";
 import { FieldExtractorService } from "../capture/field-extractor.service.js";
 import {
@@ -10,6 +10,7 @@ import { LLM_PROVIDER } from "../providers/llm/llm-provider.module.js";
 import { stripCompletionMarker } from "../providers/llm/prompt-markers.js";
 import type { LlmMessage, LlmProvider } from "../providers/llm/types.js";
 import { RuleEnforcerService } from "../rules/rule-enforcer.service.js";
+import { AgentLoopService } from "../runtime/agent-loop.service.js";
 import { ConversationSessionStore } from "./conversation-session.store.js";
 import { ConversationsService } from "./conversations.service.js";
 
@@ -18,6 +19,9 @@ export interface TurnResult {
   outcomeType?: OutcomeType;
   isComplete: boolean;
   capturedData: Record<string, unknown>;
+  /** Set when the agent handed the visitor to a human (agentic runtime only). */
+  handoffReason?: string;
+  goalProgress?: GoalProgressMap;
 }
 
 /**
@@ -38,13 +42,19 @@ export class ConversationEngineService {
     private readonly ruleEnforcer: RuleEnforcerService,
     private readonly fieldExtractor: FieldExtractorService,
     private readonly conversations: ConversationsService,
+    private readonly agentLoop: AgentLoopService,
   ) {}
 
   async handleUserMessage(params: {
     conversationId: string;
+    tenantId: string;
     config: AgentPromptConfig;
     userText: string;
   }): Promise<TurnResult> {
+    // Agentic agents run the tool-using loop; everything else keeps the original single-completion turn.
+    if (params.config.spec?.runtime.mode === "agentic") {
+      return this.agentLoop.runTurn(params);
+    }
     const userMessage: LlmMessage = { role: "user", content: params.userText };
     let state = await this.sessions.appendMessages(params.conversationId, [userMessage]);
 

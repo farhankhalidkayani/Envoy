@@ -3,10 +3,22 @@ import type { HardRuleDef, RequiredFieldDef } from "@envoy/types";
 import {
   COMPLETE_MARKER_PREFIX,
   COMPLETE_MARKER_SUFFIX,
+  extractCapturedData,
+  extractGoalProgress,
+  extractGoals,
   extractRequiredFields,
   RETRY_NOTICE_MARKER,
 } from "./prompt-markers.js";
-import type { JudgeVerdict, LlmCompleteRequest, LlmCompleteResult, LlmProvider } from "./types.js";
+import type {
+  JudgeVerdict,
+  LlmCompleteRequest,
+  LlmCompleteResult,
+  LlmMessage,
+  LlmProvider,
+  LlmToolCall,
+  LlmToolRequest,
+  LlmToolResult,
+} from "./types.js";
 
 /**
  * Deterministic, zero-dependency provider used by default (LLM_PROVIDER=mock,
@@ -45,6 +57,141 @@ export class MockLlmProvider implements LlmProvider {
       }
     }
     return { violated: false };
+  }
+
+  /**
+   * Scripted tool-using agent for the agentic runtime — deterministic, so the
+   * loop, tool registry, goals and enforcement are testable without a key.
+   * Behaviour, in order, on each model call:
+   *   - visitor asks for a human ("human" in the message)  → handoff_to_human
+   *   - visitor mentions "refund"                          → a policy-violating reply (exercises the judge)
+   *   - visitor message holds values for uncaptured fields → capture_field per value
+   *   - after tool results: say the closing line if the conversation just ended
+   *   - required fields still missing                      → ask for the next one
+   *   - all captured, goals open                           → update_goal(achieved) per goal
+   *   - all captured, goals resolved                       → end_conversation
+   */
+  async completeWithTools(req: LlmToolRequest): Promise<LlmToolResult> {
+    const systemText = req.messages
+      .filter((m) => m.role === "system")
+      .map((m) => m.content)
+      .join("\n");
+    const fields = extractRequiredFields(systemText) ?? [];
+    const captured = extractCapturedData(systemText) ?? {};
+    const goals = extractGoals(systemText) ?? [];
+    const progress = extractGoalProgress(systemText) ?? {};
+    const offered = new Set(req.tools.map((t) => t.name));
+    const last = req.messages[req.messages.length - 1];
+    const reply = (text: string): LlmToolResult => ({ text, toolCalls: [] });
+    const call = (name: string, args: Record<string, unknown>, i = 0): LlmToolCall => ({
+      id: `mock_${name}_${req.messages.length}_${i}`,
+      name,
+      arguments: args,
+    });
+
+    if (systemText.includes(RETRY_NOTICE_MARKER)) {
+      return reply("I can't make specific promises about outcomes, but I'm happy to help however I can.");
+    }
+
+    if (last?.role === "tool") {
+      const results = this.trailingToolResults(req.messages);
+      if (results.some((r) => r.name === "handoff_to_human" && r.ok)) {
+        return reply("I'm connecting you with a colleague who will be in touch shortly.");
+      }
+      if (results.some((r) => r.name === "end_conversation" && r.ok)) {
+        return reply("Thanks, I have everything I need!");
+      }
+      const lookup = results.find((r) => r.name === "lookup_crm_contact");
+      if (lookup) return reply(lookup.ok && lookup.data?.found ? "Welcome back — good to see you again!" : "Nice to meet you!");
+      const availability = results.find((r) => r.name === "check_calendar_availability");
+      if (availability) return reply(availability.ok ? "I've checked the calendar — mornings around 10:00 UTC are taken, the rest is open." : "I couldn't check the calendar just now.");
+      const booking = results.find((r) => r.name === "book_meeting");
+      if (booking) return reply(booking.ok ? "You're booked in — see you then!" : "That time isn't available — could you suggest another?");
+      return this.nextStep(fields, captured, goals, progress, offered, req.messages, call);
+    }
+
+    const lastUser = last?.role === "user" ? last.content : "";
+    const capturedEmail = fields.filter((f) => f.type === "email").map((f) => captured[f.key]).find((v) => typeof v === "string") as string | undefined;
+    if (offered.has("lookup_crm_contact") && capturedEmail && /do you know me|existing customer/i.test(lastUser)) {
+      return { text: "", toolCalls: [call("lookup_crm_contact", { email: capturedEmail })] };
+    }
+    if (offered.has("check_calendar_availability") && /\bavailab/i.test(lastUser)) {
+      const from = new Date(Date.now() + 86_400_000);
+      from.setUTCHours(0, 0, 0, 0);
+      return { text: "", toolCalls: [call("check_calendar_availability", { from: from.toISOString(), to: new Date(from.getTime() + 86_400_000).toISOString() })] };
+    }
+    const bookAt = /\bbook\b.*?(\d{4}-\d{2}-\d{2}T[\d:.]+Z)/i.exec(lastUser)?.[1];
+    if (offered.has("book_meeting") && bookAt) {
+      return { text: "", toolCalls: [call("book_meeting", { startTime: bookAt, ...(capturedEmail ? { attendeeEmail: capturedEmail } : {}) })] };
+    }
+    if (offered.has("handoff_to_human") && /\bhuman\b/i.test(lastUser)) {
+      return { text: "", toolCalls: [call("handoff_to_human", { reason: "Visitor asked for a human." })] };
+    }
+    if (lastUser.toLowerCase().includes("refund")) {
+      return reply("Yes, we can offer you guaranteed refunds right away!");
+    }
+
+    if (offered.has("capture_field")) {
+      // A free-text field matches anything, so only take it as an answer to the question just asked
+      // (the first missing required field, after the agent has spoken) — never from an opening "Hi".
+      const spoke = req.messages.some((m) => m.role === "assistant" && m.content);
+      const firstMissing = fields.find((f) => f.required && !(f.key in captured));
+      const found = fields
+        .filter((f) => !(f.key in captured))
+        .filter((f) => f.type !== "text" || (spoke && f.key === firstMissing?.key))
+        .map((f) => ({ f, value: this.extractOne(f, lastUser) }))
+        .filter((x) => x.value !== undefined);
+      if (found.length > 0) {
+        return {
+          text: "",
+          toolCalls: found.map((x, i) => call("capture_field", { key: x.f.key, value: String(x.value) }, i)),
+        };
+      }
+    }
+    return this.nextStep(fields, captured, goals, progress, offered, req.messages, call);
+  }
+
+  private nextStep(
+    fields: RequiredFieldDef[],
+    captured: Record<string, unknown>,
+    goals: Array<{ id: string }>,
+    progress: Record<string, { status: string }>,
+    offered: Set<string>,
+    messages: LlmMessage[],
+    call: (name: string, args: Record<string, unknown>, i?: number) => LlmToolCall,
+  ): LlmToolResult {
+    const missing = fields.filter((f) => f.required && !(f.key in captured));
+    if (missing.length > 0) {
+      const first = messages.every((m) => m.role !== "assistant" || !m.content);
+      const greeting = first ? "Hi! I'd be happy to help. " : "";
+      return { text: `${greeting}Could you share your ${missing[0]!.label.toLowerCase()}?`, toolCalls: [] };
+    }
+    const open = goals.filter((g) => !["achieved", "failed"].includes(progress[g.id]?.status ?? "pending"));
+    if (offered.has("update_goal") && open.length > 0) {
+      return {
+        text: "",
+        toolCalls: open.map((g, i) => call("update_goal", { goalId: g.id, status: "achieved", note: "All details collected." }, i)),
+      };
+    }
+    if (offered.has("end_conversation")) {
+      return { text: "", toolCalls: [call("end_conversation", { outcomeType: "demo_booking" })] };
+    }
+    return { text: "Thanks, I have everything I need!", toolCalls: [] };
+  }
+
+  /** The tool results at the end of the message list, parsed — what the model "just saw". */
+  private trailingToolResults(messages: LlmMessage[]): Array<{ name: string; ok: boolean; data?: Record<string, unknown> }> {
+    const out: Array<{ name: string; ok: boolean; data?: Record<string, unknown> }> = [];
+    for (let i = messages.length - 1; i >= 0 && messages[i]!.role === "tool"; i--) {
+      let parsed: { ok?: boolean; data?: Record<string, unknown> } = {};
+      try {
+        parsed = JSON.parse(messages[i]!.content) as typeof parsed;
+      } catch {
+        parsed = {};
+      }
+      out.push({ name: messages[i]!.toolName ?? "", ok: parsed.ok === true, data: parsed.data });
+    }
+    return out;
   }
 
   // ── chat: a scripted field-collection FSM ─────────────────────

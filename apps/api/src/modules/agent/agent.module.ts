@@ -1,6 +1,8 @@
 import { Module } from "@nestjs/common";
 import { BillingModule } from "../billing/billing.module.js";
 import { CoreModule } from "../core/core.module.js";
+import { CrmModule } from "../crm/crm.module.js";
+import { IntegrationsModule } from "../integrations/integrations.module.js";
 import { PipelineModule } from "../pipeline/pipeline.module.js";
 import { RoutingModule } from "../routing/routing.module.js";
 import { AgentsController } from "./agents.controller.js";
@@ -15,6 +17,8 @@ import { LlmProviderModule } from "./providers/llm/llm-provider.module.js";
 import { VoiceProviderModule } from "./providers/voice/voice-provider.module.js";
 import { PublicAgentsController } from "./public-agents.controller.js";
 import { RuleEnforcerService } from "./rules/rule-enforcer.service.js";
+import { AgentLoopService } from "./runtime/agent-loop.service.js";
+import { ToolRegistry } from "./runtime/tool-registry.js";
 
 /**
  * Phase 1: the full conversation engine. See conversation-engine.service.ts
@@ -30,6 +34,8 @@ import { RuleEnforcerService } from "./rules/rule-enforcer.service.js";
     PipelineModule,
     BillingModule,
     RoutingModule,
+    CrmModule,
+    IntegrationsModule,
   ],
   controllers: [AgentsController, PublicAgentsController, ConversationsController],
   providers: [
@@ -38,6 +44,8 @@ import { RuleEnforcerService } from "./rules/rule-enforcer.service.js";
     ConversationsService,
     RuleEnforcerService,
     FieldExtractorService,
+    ToolRegistry,
+    AgentLoopService,
     ConversationEngineService,
     AgentGateway,
   ],
