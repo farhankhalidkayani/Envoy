@@ -1,5 +1,11 @@
 import type {
   AgentSpec,
+  InsightEvidence,
+  InsightKind,
+  InsightSeverity,
+  InsightStatus,
+  ProposalChanges,
+  ProposalStatus,
   OutcomeType as OutcomeTypeName,
   ScenarioCheck,
   ScenarioDef,
@@ -352,4 +358,72 @@ export interface ScenarioRunRecord {
     steps: SimulationTurn["steps"];
     route: { provider: string; model: string; keySource: "tenant" | "platform"; failedOver?: boolean } | null;
   };
+}
+
+export interface VersionMetrics {
+  version: number;
+  conversations: number;
+  bounces: number;
+  engaged: number;
+  completed: number;
+  abandoned: number;
+  handoffs: number;
+  completionRate: number | null;
+  avgTurnsToComplete: number | null;
+  blockedViolations: number;
+  toolCalls: number;
+  toolErrors: number;
+}
+
+export interface AgentMetrics {
+  days: number;
+  currentVersion: number;
+  truncated: boolean;
+  versions: VersionMetrics[];
+}
+
+export interface Insight {
+  id: string;
+  agentVersion: number;
+  kind: InsightKind;
+  fingerprint: string;
+  severity: InsightSeverity;
+  title: string;
+  detail: string;
+  evidence: InsightEvidence;
+  status: InsightStatus;
+  createdAt: string;
+}
+
+export interface ProposalTestResult {
+  testedAt: string;
+  scenarios: {
+    total: number;
+    baselinePassed: number;
+    candidatePassed: number;
+    regressions: Array<{ scenario: string; failed: Array<{ check: string; detail: string }> }>;
+    fixed: string[];
+  };
+  replay: {
+    total: number;
+    baselineCompleted: number;
+    candidateCompleted: number;
+    items: Array<{ conversationId: string; baseline: { completed: boolean; captured: number }; candidate: { completed: boolean; captured: number } }>;
+  };
+  hardRulesPreserved: boolean;
+  safe: boolean;
+}
+
+export interface Proposal {
+  id: string;
+  insightId: string | null;
+  baseVersion: number;
+  changes: ProposalChanges;
+  rationale: string;
+  status: ProposalStatus;
+  testResult: ProposalTestResult | null;
+  appliedVersion: number | null;
+  createdAt: string;
+  /** The agent has changed since this was drafted, so it can no longer be tested or approved. */
+  stale: boolean;
 }

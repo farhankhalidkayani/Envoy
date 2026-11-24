@@ -83,10 +83,16 @@ export class AgentGateway {
     });
 
     ws.on("close", () => {
-      if (state.conversationId) {
-        void this.conversations.abandon(state.conversationId);
-        void this.sessions.clear(state.conversationId);
-      }
+      const id = state.conversationId;
+      if (!id) return;
+      // Read the session BEFORE clearing it: it is the only record of how far the visitor got.
+      void (async () => {
+        const session = await this.sessions.get(id).catch(() => null);
+        await this.conversations
+          .abandon(id, session ? { history: session.history, capturedData: session.capturedData } : undefined)
+          .catch((err: Error) => this.logger.warn(`could not record abandoned conversation: ${err.message}`));
+        await this.sessions.clear(id);
+      })();
     });
   }
 

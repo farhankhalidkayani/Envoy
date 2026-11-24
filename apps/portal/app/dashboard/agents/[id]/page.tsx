@@ -196,6 +196,7 @@ export default function AgentDetailPage() {
         <h1 className="page-title page-title--flush">{agent.name}</h1>
         <span style={{ display: "flex", gap: 8 }}>
         <Link href={`/dashboard/agents/${agent.id}/test`} className="btn">Test agent</Link>
+        <Link href={`/dashboard/agents/${agent.id}/improve`} className="btn">Improve</Link>
         <button
           onClick={toggleLive}
           disabled={publishing}

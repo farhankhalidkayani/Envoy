@@ -34,6 +34,8 @@ export class MockLlmProvider implements LlmProvider {
   readonly model = "mock";
 
   async complete(req: LlmCompleteRequest): Promise<LlmCompleteResult> {
+    const system = req.messages.filter((m) => m.role === "system").map((m) => m.content).join("\n");
+    if (system.includes("<<ENVOY_PROPOSE>>")) return { text: this.propose(system) };
     switch (req.purpose) {
       case "extract":
         return { text: this.extract(req) };
@@ -193,6 +195,29 @@ export class MockLlmProvider implements LlmProvider {
       out.push({ name: messages[i]!.toolName ?? "", ok: parsed.ok === true, data: parsed.data });
     }
     return out;
+  }
+
+  /** Deterministic stand-in for the improvement proposer, driven by the insight kind the prompt names. */
+  private propose(system: string): string {
+    const kind = /INSIGHT_KIND:(\w+)/.exec(system)?.[1];
+    const field = /INSIGHT_FIELD:(\w+)/.exec(system)?.[1];
+    const script = /<<CURRENT_SCRIPT>>([\s\S]*?)<<END_CURRENT_SCRIPT>>/.exec(system)?.[1] ?? "";
+    if (kind === "abandon_at_field" && field) {
+      return JSON.stringify({
+        rationale: `Visitors leave when asked for ${field}. Telling them why it is needed should make asking for it feel reasonable.`,
+        fieldPrompts: { [field]: "Briefly explain why you need this and how it will be used before asking for it." },
+      });
+    }
+    if (kind === "rule_blocked") {
+      return JSON.stringify({
+        rationale: "The agent keeps drafting replies that break a hard rule; steering it away from those topics in the script should stop it trying.",
+        script: `${script}\n\nNever bring up topics your hard rules forbid; politely steer back to what the visitor wants.`.trim(),
+      });
+    }
+    return JSON.stringify({
+      rationale: "Shorter, one-question-at-a-time replies tend to keep visitors in the conversation.",
+      script: `${script}\n\nKeep replies short and ask one question at a time.`.trim(),
+    });
   }
 
   // ── chat: a scripted field-collection FSM ─────────────────────

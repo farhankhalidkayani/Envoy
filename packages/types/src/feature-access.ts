@@ -13,6 +13,7 @@ export const FEATURE_KEYS = [
   "voice",
   "integrations",
   "forms",
+  "improvement",
 ] as const;
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
 
@@ -35,4 +36,6 @@ export const DEFAULT_FEATURE_ACCESS: FeatureAccess = {
   voice: false,
   integrations: false,
   forms: false,
+  // Off by default: analysis and test runs spend the tenant's model usage, so the operator turns it on per user.
+  improvement: false,
 };

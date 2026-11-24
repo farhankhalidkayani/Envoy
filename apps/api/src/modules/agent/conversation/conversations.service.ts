@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import type { OutcomeType } from "@envoy/types";
 import type { Prisma } from "@envoy/db";
 import { PrismaService } from "../../core/prisma/prisma.service.js";
+import { assembleTranscript } from "../../pipeline/transcript.js";
 import { PipelineQueueService } from "../../pipeline/pipeline-queue.service.js";
 import { CaptureRoutingService } from "../../routing/capture-routing.service.js";
 import type { LlmMessage } from "../providers/llm/types.js";
@@ -73,6 +74,7 @@ export class ConversationsService {
         outcomeType: params.outcomeType,
         capturedData: params.capturedData as Prisma.InputJsonValue,
         handoffReason: params.handoffReason,
+        turnCount: params.history.filter((m) => m.role === "user").length,
         completedAt: new Date(),
       },
     });
@@ -95,12 +97,23 @@ export class ConversationsService {
     });
   }
 
-  async abandon(conversationId: string) {
+  /**
+   * `snapshot` is what the visitor had said and the agent had captured when they left. Keeping it is what lets
+   * the improvement harness see where visitors drop off — without it an abandoned conversation is an empty row.
+   * A visitor who left before saying anything (a bounce) has no messages and records no transcript.
+   */
+  async abandon(conversationId: string, snapshot?: { history: LlmMessage[]; capturedData: Record<string, unknown> }) {
+    const turnCount = snapshot?.history.filter((m) => m.role === "user").length;
+    const transcript = snapshot && turnCount ? assembleTranscript(snapshot.history) : undefined;
     // Only in-progress conversations can be abandoned — a completed one
     // finishing its pipeline job after the socket drops is not an abandon.
     await this.prisma.client.conversation.updateMany({
       where: { id: conversationId, status: "in_progress" },
-      data: { status: "abandoned" },
+      data: {
+        status: "abandoned",
+        ...(snapshot ? { turnCount: turnCount ?? 0 } : {}),
+        ...(transcript ? { transcriptText: transcript, capturedData: snapshot!.capturedData as Prisma.InputJsonValue } : {}),
+      },
     });
   }
 

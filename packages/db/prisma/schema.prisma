@@ -86,6 +86,8 @@ model Tenant {
   modelUsage       ModelUsage[]
   scenarios        Scenario[]
   scenarioRuns     ScenarioRun[]
+  insights         Insight[]
+  proposals        Proposal[]
 
   @@map("tenants")
 }
@@ -189,6 +191,8 @@ model Agent {
   versions      AgentVersion[]
   scenarios     Scenario[]
   scenarioRuns  ScenarioRun[]
+  insights      Insight[]
+  proposals     Proposal[]
 
   @@index([tenantId])
   @@index([leadFormId])
@@ -239,6 +243,8 @@ model Conversation {
   goalProgress          Json                @default("{}")
   /// Set when the agent handed the visitor to a human (handoff_to_human tool).
   handoffReason         String?
+  /// Visitor messages sent. Null on conversations from before this was recorded.
+  turnCount             Int?
   crmPushedAt           DateTime?
   crmExternalId         String?
   crmPushError          String?
@@ -531,4 +537,74 @@ model ScenarioRun {
   @@index([agentId, createdAt])
   @@index([tenantId, createdAt])
   @@map("scenario_runs")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Improvement harness — what went wrong, and tested fixes for it
+// ─────────────────────────────────────────────────────────────
+
+enum InsightStatus {
+  open
+  dismissed
+}
+
+/// A diagnosed problem in how an agent performs on real conversations (InsightKind in @envoy/types).
+model Insight {
+  id           String        @id @default(cuid())
+  tenantId     String
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  agentId      String
+  agent        Agent         @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  /// Which agent version the evidence comes from.
+  agentVersion Int
+  kind         String
+  /// Stable identity of the problem within a version (e.g. "abandon_at_field:phone"), so re-analysing updates instead of duplicating.
+  fingerprint  String
+  severity     String
+  title        String
+  detail       String
+  /// InsightEvidence
+  evidence     Json
+  status       InsightStatus @default(open)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  proposals    Proposal[]
+
+  @@unique([agentId, agentVersion, fingerprint])
+  @@index([tenantId])
+  @@map("insights")
+}
+
+enum ProposalStatus {
+  pending
+  tested
+  approved
+  rejected
+}
+
+/// A drafted change to an agent (ProposalChanges in @envoy/types), proven on its scenarios before it can be approved.
+model Proposal {
+  id             String         @id @default(cuid())
+  tenantId       String
+  tenant         Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  agentId        String
+  agent          Agent          @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  insightId      String?
+  insight        Insight?       @relation(fields: [insightId], references: [id], onDelete: SetNull)
+  /// The agent version this was drafted against; approving is refused once the agent has moved on.
+  baseVersion    Int
+  changes        Json
+  rationale      String
+  status         ProposalStatus @default(pending)
+  /// { scenarios: { baseline, candidate, regressions[] }, replay: {...}, testedAt }
+  testResult     Json?
+  /// The AgentVersion created when approved.
+  appliedVersion Int?
+  decidedBy      String?
+  decidedAt      DateTime?
+  createdAt      DateTime       @default(now())
+
+  @@index([agentId, createdAt])
+  @@index([tenantId])
+  @@map("proposals")
 }

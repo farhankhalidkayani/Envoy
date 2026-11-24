@@ -3,6 +3,7 @@ import type {
   AdminTenant,
   AdminTenantDetail,
   Agent,
+  AgentMetrics,
   AgentVersion,
   AuditLogEntry,
   AuthResult,
@@ -13,12 +14,14 @@ import type {
   EmailIntegrationConfig,
   Form,
   FormSubmission,
+  Insight,
   Integration,
   Lead,
   ModelCatalog,
   ModelCredential,
   ModelStatus,
   ModelUsageSummary,
+  Proposal,
   PublicForm,
   RunStep,
   Scenario,
@@ -188,6 +191,20 @@ export function createApiClient(config: ApiClientConfig) {
         request<SimulationTurn>(`/agents/${id}/simulate`, { method: "POST", body: { message, sessionId, sandbox } }),
       resetSimulation: (id: string, sessionId: string) =>
         request<{ reset: true }>(`/agents/${id}/simulate/${sessionId}`, { method: "DELETE" }),
+      /** The improvement harness. Needs the `improvement` feature enabled for the user. */
+      improvement: {
+        metrics: (id: string, days = 30) => request<AgentMetrics>(`/agents/${id}/improvement/metrics`, { query: { days: String(days) } }),
+        insights: (id: string) => request<Insight[]>(`/agents/${id}/improvement/insights`),
+        analyze: (id: string, days = 30) => request<Insight[]>(`/agents/${id}/improvement/analyze`, { method: "POST", query: { days: String(days) } }),
+        setInsightStatus: (id: string, insightId: string, status: "open" | "dismissed") =>
+          request<Insight>(`/agents/${id}/improvement/insights/${insightId}`, { method: "PATCH", body: { status } }),
+        propose: (id: string, insightId: string) => request<Proposal>(`/agents/${id}/improvement/insights/${insightId}/propose`, { method: "POST" }),
+        proposals: (id: string) => request<Proposal[]>(`/agents/${id}/improvement/proposals`),
+        test: (id: string, proposalId: string) => request<Proposal>(`/agents/${id}/improvement/proposals/${proposalId}/test`, { method: "POST" }),
+        approve: (id: string, proposalId: string, acknowledgeUntested = false) =>
+          request<{ appliedVersion: number }>(`/agents/${id}/improvement/proposals/${proposalId}/approve`, { method: "POST", body: { acknowledgeUntested } }),
+        reject: (id: string, proposalId: string) => request<{ rejected: true }>(`/agents/${id}/improvement/proposals/${proposalId}/reject`, { method: "POST" }),
+      },
       scenarios: {
         list: (id: string) => request<Scenario[]>(`/agents/${id}/scenarios`),
         status: (id: string) => request<ScenarioStatus>(`/agents/${id}/scenarios/status`),
