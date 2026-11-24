@@ -5,8 +5,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
-import { BotIcon, ChatIcon, SyncIcon, CardIcon, PlugIcon, FormIcon, UsersIcon, SettingsIcon, LogoMark, LogOutIcon } from "../../components/icons";
+import { BotIcon, ChatIcon, SyncIcon, CardIcon, PlugIcon, FormIcon, UsersIcon, SettingsIcon, LogoMark, LogOutIcon, CpuIcon } from "../../components/icons";
 import { ThemeToggle } from "../../components/ThemeToggle";
+import { ModelBanner } from "../../components/models/ModelBanner";
 
 const NAV = [
   { href: "/dashboard", label: "Agents", icon: BotIcon },
@@ -15,6 +16,7 @@ const NAV = [
   { href: "/dashboard/forms", label: "Lead forms", icon: FormIcon },
   { href: "/dashboard/crm", label: "CRM", icon: SyncIcon },
   { href: "/dashboard/integrations", label: "Integrations", icon: PlugIcon },
+  { href: "/dashboard/models", label: "AI models", icon: CpuIcon },
   { href: "/dashboard/billing", label: "Billing", icon: CardIcon },
   { href: "/dashboard/settings", label: "Settings", icon: SettingsIcon },
 ];
@@ -132,6 +134,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             has been deleted.
           </div>
         )}
+        <ModelBanner />
         {children}
       </main>
     </div>

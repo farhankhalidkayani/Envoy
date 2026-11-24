@@ -1,5 +1,6 @@
 "use client";
 
+import type { ModelCredential } from "@envoy/sdk";
 import type { AgentSpec, BuiltInToolName, GoalDef } from "@envoy/types";
 import { CORE_TOOL_NAMES, OPT_IN_TOOL_NAMES } from "@envoy/types";
 
@@ -27,7 +28,16 @@ function goalIdFrom(title: string, taken: Set<string>): string {
   return id;
 }
 
-export function AgentBehaviorEditor({ spec, onChange }: { spec: AgentSpec; onChange(spec: AgentSpec): void }) {
+export function AgentBehaviorEditor({
+  spec,
+  onChange,
+  credentials = [],
+}: {
+  spec: AgentSpec;
+  onChange(spec: AgentSpec): void;
+  /** The workspace's working API keys, for the per-agent model override. Omit to hide it. */
+  credentials?: ModelCredential[];
+}) {
   const agentic = spec.runtime.mode === "agentic";
   const set = (patch: Partial<AgentSpec>) => onChange({ ...spec, ...patch });
   const setRuntime = (patch: Partial<AgentSpec["runtime"]>) => set({ runtime: { ...spec.runtime, ...patch } });
@@ -78,6 +88,39 @@ export function AgentBehaviorEditor({ spec, onChange }: { spec: AgentSpec; onCha
           <option value="agentic">Agentic (tools &amp; goals)</option>
         </select>
       </div>
+
+      {credentials.length > 0 && (
+        <div className="field">
+          <label htmlFor="agent-model-key">Model for this agent</label>
+          <div style={{ display: "flex", gap: 8 }}>
+            <select
+              id="agent-model-key"
+              value={spec.models.default?.credentialId ?? ""}
+              onChange={(e) => {
+                const { default: _drop, ...rest } = spec.models;
+                set({ models: e.target.value ? { ...rest, default: { credentialId: e.target.value, model: spec.models.default?.model ?? "" } } : rest });
+              }}
+              style={{ width: 220 }}
+            >
+              <option value="">Use the workspace setting</option>
+              {credentials.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+            {spec.models.default && (
+              <input
+                aria-label="Model name for this agent"
+                value={spec.models.default.model}
+                maxLength={100}
+                placeholder="model name, e.g. claude-opus-5-5"
+                onChange={(e) => set({ models: { ...spec.models, default: { credentialId: spec.models.default!.credentialId, model: e.target.value } } })}
+                style={{ flex: 1 }}
+              />
+            )}
+          </div>
+          <p style={{ fontSize: 11.5, color: "var(--ink-faint)", marginTop: 4 }}>
+            Overrides the workspace&apos;s AI model settings for this agent only. Leave on the workspace setting unless this agent needs a different model.
+          </p>
+        </div>
+      )}
 
       {agentic && (
         <>

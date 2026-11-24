@@ -68,6 +68,8 @@ model Tenant {
   industry           String?
   subscriptionStatus SubscriptionStatus @default(active)
   priceConfig        Json               @default("{}")
+  /// ModelConfig from @envoy/types — which credential + model serves each AI role. "{}" = platform default everywhere.
+  modelConfig        Json               @default("{}")
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
@@ -80,6 +82,8 @@ model Tenant {
   formSubmissions FormSubmission[]
   subscription    Subscription?
   auditLogs       AuditLog[]
+  modelCredentials ModelCredential[]
+  modelUsage       ModelUsage[]
 
   @@map("tenants")
 }
@@ -404,4 +408,68 @@ model AuditLog {
   @@index([tenantId])
   @@index([adminUserId])
   @@map("audit_logs")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Bring-your-own-model keys
+// ─────────────────────────────────────────────────────────────
+
+enum ModelProviderKind {
+  anthropic
+  openai
+  gemini
+  groq
+  openai_compatible
+}
+
+enum ModelCredentialStatus {
+  active
+  /// The provider rejected the key (401/403) on a live call or a re-test.
+  invalid
+}
+
+/// A tenant's own provider API key. The key itself is AES-256-GCM encrypted
+/// (same scheme as CRM tokens) and is never returned by any API — only `last4`.
+model ModelCredential {
+  id           String                @id @default(cuid())
+  tenantId     String
+  tenant       Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  provider     ModelProviderKind
+  label        String
+  encryptedKey String
+  last4        String
+  /// Only for openai_compatible (and optional OpenAI proxies); fetched through the SSRF guard.
+  baseUrl      String?
+  status       ModelCredentialStatus @default(active)
+  lastUsedAt   DateTime?
+  lastError    String?
+  createdAt    DateTime              @default(now())
+
+  @@index([tenantId])
+  @@map("model_credentials")
+}
+
+enum ModelKeySource {
+  tenant
+  platform
+}
+
+/// One row per model call — what the usage dashboard, and later cost caps, read.
+model ModelUsage {
+  id           String         @id @default(cuid())
+  tenantId     String
+  tenant       Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  credentialId String?
+  role         String
+  provider     String
+  model        String
+  keySource    ModelKeySource
+  inputTokens  Int?
+  outputTokens Int?
+  latencyMs    Int
+  ok           Boolean
+  createdAt    DateTime       @default(now())
+
+  @@index([tenantId, createdAt])
+  @@map("model_usage")
 }

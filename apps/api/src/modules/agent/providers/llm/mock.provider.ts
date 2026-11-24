@@ -31,6 +31,7 @@ import type {
 @Injectable()
 export class MockLlmProvider implements LlmProvider {
   readonly name = "mock";
+  readonly model = "mock";
 
   async complete(req: LlmCompleteRequest): Promise<LlmCompleteResult> {
     switch (req.purpose) {

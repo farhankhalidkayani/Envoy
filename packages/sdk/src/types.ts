@@ -1,5 +1,9 @@
 import type {
   AgentSpec,
+  ModelConfig,
+  ModelProviderKind,
+  ModelRole,
+  CatalogModel,
   AgentStatus,
   GoalProgressMap,
   RunStepKind,
@@ -235,4 +239,45 @@ export interface RunStep {
   error: string | null;
   latencyMs: number | null;
   createdAt: string;
+}
+
+/** A stored provider API key as the API shows it — the key itself is never returned, only its last four characters. */
+export interface ModelCredential {
+  id: string;
+  provider: ModelProviderKind;
+  label: string;
+  last4: string;
+  baseUrl: string | null;
+  status: "active" | "invalid";
+  lastUsedAt: string | null;
+  lastError: string | null;
+  createdAt: string;
+}
+
+export interface ModelStatus {
+  /** True until at least one role is actually served by the tenant's own working key. */
+  usingPlatformDefault: boolean;
+  hasInvalidCredential: boolean;
+  credentialCount: number;
+  roles: Record<ModelRole, { source: "tenant" | "platform"; provider?: ModelProviderKind; model?: string }>;
+  config: ModelConfig;
+}
+
+export interface ModelCatalog {
+  providers: Array<{ id: ModelProviderKind; label: string; models: CatalogModel[] }>;
+}
+
+export interface ModelUsageSummary {
+  days: number;
+  rows: Array<{
+    keySource: "tenant" | "platform";
+    provider: string;
+    model: string;
+    role: string;
+    calls: number;
+    failures: number;
+    inputTokens: number;
+    outputTokens: number;
+    avgLatencyMs: number;
+  }>;
 }

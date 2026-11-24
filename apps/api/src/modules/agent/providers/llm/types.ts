@@ -33,7 +33,26 @@ export interface LlmToolRequest {
   maxTokens?: number;
 }
 
+/** Token counts when the provider reports them. */
+export interface LlmUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/** A failed provider call that kept its HTTP status, so the router can tell "bad key" from "provider down". */
+export class LlmHttpError extends Error {
+  constructor(
+    readonly provider: string,
+    readonly status: number,
+    body: string,
+  ) {
+    super(`${provider} API error ${status}: ${body.slice(0, 300)}`);
+    this.name = "LlmHttpError";
+  }
+}
+
 export interface LlmToolResult {
+  usage?: LlmUsage;
   /** Visible text, possibly empty when the model only called tools. */
   text: string;
   toolCalls: LlmToolCall[];
@@ -58,9 +77,11 @@ export interface LlmCompleteRequest {
 
 export interface LlmCompleteResult {
   text: string;
+  usage?: LlmUsage;
 }
 
 export interface JudgeVerdict {
+  usage?: LlmUsage;
   violated: boolean;
   ruleId?: string;
   reason?: string;
@@ -68,6 +89,8 @@ export interface JudgeVerdict {
 
 export interface LlmProvider {
   readonly name: string;
+  /** The model id calls go to, when the provider knows it (shown in traces and usage). */
+  readonly model?: string;
   complete(req: LlmCompleteRequest): Promise<LlmCompleteResult>;
   /**
    * One model call with tools available — the primitive the agent loop

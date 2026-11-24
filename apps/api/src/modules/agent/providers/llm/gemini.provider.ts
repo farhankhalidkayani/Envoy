@@ -2,17 +2,24 @@ import { Injectable } from "@nestjs/common";
 import type { HardRuleDef } from "@envoy/types";
 import { buildJudgeMessages, parseJudgeResponse } from "./judge-prompt.js";
 import { parseGeminiToolResponse, toGeminiToolShape, toGeminiTools } from "./tool-wire.js";
-import type {
-  JudgeVerdict,
-  LlmCompleteRequest,
-  LlmCompleteResult,
-  LlmMessage,
-  LlmProvider,
-  LlmToolRequest,
-  LlmToolResult,
+import {
+  LlmHttpError,
+  type JudgeVerdict,
+  type LlmCompleteRequest,
+  type LlmCompleteResult,
+  type LlmMessage,
+  type LlmProvider,
+  type LlmToolRequest,
+  type LlmToolResult,
 } from "./types.js";
 
 const DEFAULT_MODEL = "gemini-2.0-flash";
+
+function geminiUsage(data: { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number } }) {
+  return data.usageMetadata
+    ? { inputTokens: data.usageMetadata.promptTokenCount ?? 0, outputTokens: data.usageMetadata.candidatesTokenCount ?? 0 }
+    : undefined;
+}
 
 interface GeminiContent {
   role: "user" | "model";
@@ -24,7 +31,7 @@ interface GeminiContent {
 export class GeminiLlmProvider implements LlmProvider {
   readonly name = "gemini";
 
-  constructor(private readonly apiKey: string, private readonly model = DEFAULT_MODEL) {}
+  constructor(private readonly apiKey: string, readonly model = DEFAULT_MODEL) {}
 
   async complete(req: LlmCompleteRequest): Promise<LlmCompleteResult> {
     const { systemText, contents } = this.toGeminiShape(req.messages);
@@ -40,13 +47,14 @@ export class GeminiLlmProvider implements LlmProvider {
       }),
     });
     if (!response.ok) {
-      throw new Error(`Gemini API error ${response.status}: ${await response.text()}`);
+      throw new LlmHttpError("gemini", response.status, await response.text().catch(() => ""));
     }
     const data = (await response.json()) as {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
     };
     const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
-    return { text };
+    return { text, usage: geminiUsage(data) };
   }
 
   async completeWithTools(req: LlmToolRequest): Promise<LlmToolResult> {
@@ -63,19 +71,20 @@ export class GeminiLlmProvider implements LlmProvider {
       }),
     });
     if (!response.ok) {
-      throw new Error(`Gemini API error ${response.status}: ${await response.text()}`);
+      throw new LlmHttpError("gemini", response.status, await response.text().catch(() => ""));
     }
-    return parseGeminiToolResponse((await response.json()) as Parameters<typeof parseGeminiToolResponse>[0]);
+    const data = (await response.json()) as Parameters<typeof parseGeminiToolResponse>[0] & { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number } };
+    return { ...parseGeminiToolResponse(data), usage: geminiUsage(data) };
   }
 
   async judge(candidateText: string, hardRules: HardRuleDef[]): Promise<JudgeVerdict> {
     if (hardRules.length === 0) return { violated: false };
-    const { text } = await this.complete({
+    const { text, usage } = await this.complete({
       purpose: "chat",
       messages: buildJudgeMessages(candidateText, hardRules),
       maxTokens: 200,
     });
-    return parseJudgeResponse(text);
+    return { ...parseJudgeResponse(text), usage };
   }
 
   /** Gemini has no "system" role in `contents` — fold system messages into systemInstruction, map assistant→model. */

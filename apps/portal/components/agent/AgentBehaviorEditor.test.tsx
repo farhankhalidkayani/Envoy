@@ -84,4 +84,28 @@ describe("AgentBehaviorEditor", () => {
     fireEvent.click(screen.getByLabelText(/Book a meeting/, { selector: "input[type=checkbox]" }));
     expect((onChange.mock.calls[0]![0] as AgentSpec).tools).toEqual([]);
   });
+
+  describe("per-agent model override", () => {
+    const creds = [{ id: "k1", label: "Production", provider: "anthropic", last4: "1234", baseUrl: null, status: "active", lastUsedAt: null, lastError: null, createdAt: "" }] as never;
+
+    it("is hidden when the workspace has no working key", () => {
+      render(<AgentBehaviorEditor spec={classic} onChange={() => {}} />);
+      expect(screen.queryByLabelText("Model for this agent")).toBeNull();
+    });
+
+    it("sets and clears the agent's own model without touching other settings", () => {
+      const onChange = vi.fn();
+      const { rerender } = render(<AgentBehaviorEditor spec={classic} onChange={onChange} credentials={creds} />);
+      fireEvent.change(screen.getByLabelText("Model for this agent"), { target: { value: "k1" } });
+      const chosen = onChange.mock.calls[0]![0] as AgentSpec;
+      expect(chosen.models.default).toEqual({ credentialId: "k1", model: "" });
+
+      rerender(<AgentBehaviorEditor spec={chosen} onChange={onChange} credentials={creds} />);
+      fireEvent.change(screen.getByLabelText("Model name for this agent"), { target: { value: "claude-opus-5-5" } });
+      expect((onChange.mock.calls[1]![0] as AgentSpec).models.default).toEqual({ credentialId: "k1", model: "claude-opus-5-5" });
+
+      fireEvent.change(screen.getByLabelText("Model for this agent"), { target: { value: "" } });
+      expect((onChange.mock.calls[2]![0] as AgentSpec).models.default).toBeUndefined();
+    });
+  });
 });

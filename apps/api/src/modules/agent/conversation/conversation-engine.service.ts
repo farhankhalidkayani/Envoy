@@ -9,6 +9,7 @@ import {
 import { LLM_PROVIDER } from "../providers/llm/llm-provider.module.js";
 import { stripCompletionMarker } from "../providers/llm/prompt-markers.js";
 import type { LlmMessage, LlmProvider } from "../providers/llm/types.js";
+import { runWithModelContext } from "../../models/model-context.js";
 import { RuleEnforcerService } from "../rules/rule-enforcer.service.js";
 import { AgentLoopService } from "../runtime/agent-loop.service.js";
 import { ConversationSessionStore } from "./conversation-session.store.js";
@@ -46,6 +47,16 @@ export class ConversationEngineService {
   ) {}
 
   async handleUserMessage(params: {
+    conversationId: string;
+    tenantId: string;
+    config: AgentPromptConfig;
+    userText: string;
+  }): Promise<TurnResult> {
+    // Every model call in this turn — reply, judge, extraction — routes to the tenant's own key/model when they set one.
+    return runWithModelContext({ tenantId: params.tenantId, agentModels: params.config.spec?.models }, () => this.handleTurn(params));
+  }
+
+  private async handleTurn(params: {
     conversationId: string;
     tenantId: string;
     config: AgentPromptConfig;

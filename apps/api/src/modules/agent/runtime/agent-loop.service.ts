@@ -13,6 +13,7 @@ import type { LlmMessage, LlmProvider, LlmToolCall } from "../providers/llm/type
 import { RuleEnforcerService } from "../rules/rule-enforcer.service.js";
 import { buildAgenticMessages } from "./agentic-prompt.js";
 import { missingRequiredKeys } from "./built-in-tools.js";
+import { currentModelContext } from "../../models/model-context.js";
 import { RunState } from "./run-state.js";
 import { TurnRecorder } from "./run-recorder.js";
 import { ToolRegistry } from "./tool-registry.js";
@@ -132,7 +133,13 @@ export class AgentLoopService {
         kind: "model",
         name: this.llm.name,
         input: { step, toolsOffered: offered.length },
-        output: { text: result.text.slice(0, 500), toolCalls: result.toolCalls.map((c) => c.name) },
+        output: {
+          text: result.text.slice(0, 500),
+          toolCalls: result.toolCalls.map((c) => c.name),
+          // Which key and model actually answered — "platform" means the shared default.
+          route: currentModelContext()?.lastRoute,
+          usage: result.usage,
+        },
         latencyMs: Date.now() - started,
       });
 

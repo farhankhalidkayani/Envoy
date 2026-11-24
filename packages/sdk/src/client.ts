@@ -1,4 +1,4 @@
-import type { AgentSpec, ApiOptionsSource, FeatureAccess, FormOption, FormSchema, PriceConfig } from "@envoy/types";
+import type { AgentSpec, ApiOptionsSource, ModelConfig, ModelProviderKind, FeatureAccess, FormOption, FormSchema, PriceConfig } from "@envoy/types";
 import type {
   AdminTenant,
   AdminTenantDetail,
@@ -15,6 +15,10 @@ import type {
   FormSubmission,
   Integration,
   Lead,
+  ModelCatalog,
+  ModelCredential,
+  ModelStatus,
+  ModelUsageSummary,
   PublicForm,
   RunStep,
   Subscription,
@@ -174,6 +178,20 @@ export function createApiClient(config: ApiClientConfig) {
       versions: (id: string) => request<AgentVersion[]>(`/agents/${id}/versions`),
       restoreVersion: (id: string, version: number) =>
         request<Agent>(`/agents/${id}/versions/${version}/restore`, { method: "POST" }),
+    },
+
+    models: {
+      catalog: () => request<ModelCatalog>("/models/catalog"),
+      status: () => request<ModelStatus>("/models/status"),
+      listCredentials: () => request<ModelCredential[]>("/models/credentials"),
+      addCredential: (input: { provider: ModelProviderKind; label: string; apiKey: string; baseUrl?: string; testModel?: string }) =>
+        request<ModelCredential>("/models/credentials", { method: "POST", body: input }),
+      testCredential: (id: string, model?: string) =>
+        request<{ ok: true } | { ok: false; error: string }>(`/models/credentials/${id}/test`, { method: "POST", body: { model } }),
+      deleteCredential: (id: string) => request<{ deleted: true }>(`/models/credentials/${id}`, { method: "DELETE" }),
+      getConfig: () => request<ModelConfig>("/models/config"),
+      setConfig: (config: ModelConfig) => request<ModelConfig>("/models/config", { method: "PUT", body: config }),
+      usage: (days = 30) => request<ModelUsageSummary>("/models/usage", { query: { days: String(days) } }),
     },
 
     conversations: {

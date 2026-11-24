@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ModelConfig } from "./models.js";
 
 /**
  * The agentic half of an agent's configuration (Agent.spec). The classic
@@ -91,6 +92,8 @@ export const AgentSpec = z
     goals: z.array(GoalDef).max(10).default([]),
     tools: z.array(ToolPermission).max(20).default([]),
     runtime: AgentRuntimeConfig.default({}),
+    /** Per-agent model overrides; anything unset falls back to the workspace's model config. */
+    models: ModelConfig.partial({ allowPlatformFallback: true }).default({}),
   })
   .superRefine((spec, ctx) => {
     const seenGoals = new Set<string>();

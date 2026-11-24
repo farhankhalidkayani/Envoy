@@ -421,7 +421,7 @@ pnpm dev                    # landing :3000, portal :3001, admin :3002, api :400
 - `packages/ui` is empty; portal and admin use their own components/styles.
 - CRM supports HubSpot only (Zoho was dropped in a later migration).
 - The leads feed uses a growing `limit` instead of a true cursor across two sources.
-- **Model choice is global, not per tenant.** The LLM, STT and TTS providers are single process-wide instances picked by env vars (`LLM_PROVIDER` etc.) using the platform's own keys. Tenants cannot bring their own keys or choose a model (section 17.5).
+- **Model choice is only partly per tenant.** LLM calls can now use a tenant's own key and model (section 17.5.0). Voice (STT/TTS) is still a single process-wide provider chosen by env vars, using the platform's keys.
 - **The agentic runtime is only partly built.** Agents can now run in `agentic` mode (section 17.1.0 lists what exists). Still missing: calendar and CRM tools, custom HTTP tools, knowledge/RAG, long-term memory, multi-agent routing, the scenario/evaluation harness, visitor- and staff-confirmation approval modes, and a live simulator. Classic mode (one completion per turn) remains the default and the evaluation baseline.
 
 **Future work**
@@ -828,6 +828,20 @@ Measure the harness by running a fixed set of simulated visitors (scripted perso
 - Prompt injection through visitor messages reaching the proposer, mitigated by treating transcripts as data and by the approval gate.
 
 ### 17.5 Planned feature: Bring Your Own Model Keys (BYOK), recommended for best performance
+
+#### 17.5.0 Implementation status (updated 2026-11-24)
+
+**Built and tested (phases 1 and 2, LLM only):**
+- **Keys:** `ModelCredential` per tenant. Providers: Anthropic, OpenAI, Google Gemini, Groq, and any OpenAI-compatible endpoint (custom base URL, SSRF-guarded). Keys are AES-256-GCM encrypted at rest, write-only (only the last 4 characters are ever returned), never logged or placed in traces, and verified with a real test call before saving (a failed test stores nothing and never echoes the key). Max 10 per workspace; all key changes are audited without the key.
+- **Routing:** the `LLM_PROVIDER` that every call site already injects is now a router. A per-run context (async local storage) names the tenant, so replies, rule checks, data extraction and the post-conversation summary all use the tenant's key and model for that role, with no call-site changes. Resolution order: the agent's own override, then the workspace's per-role choice, then the workspace default, then the shared platform model. A credential id belonging to another tenant resolves to nothing, even if written into an agent spec.
+- **Roles and presets:** `chat`, `judge`, `extract`, `summarize`, each with its own key and model; presets (Best quality, Balanced, Lowest cost) fill them from a per-provider catalog; any model id can be typed.
+- **Resilience:** on a rejected key (401/403) the credential is marked invalid; on rejection, quota/rate limit, provider outage or network error the call is answered from the shared model when the tenant allows it (default), otherwise the failure surfaces. A malformed request (400) is never retried on another model.
+- **Usage:** every call records provider, model, role, key source, tokens (when the provider reports them), latency and success; `GET /models/usage` summarises it. Agent run traces now show which key and model answered each step.
+- **Recommendation (decision recorded in 17.5.2):** the shared default stays the zero-setup default. The portal shows a persistent banner on every dashboard page until a working key serves the workspace, a "Running on" badge on each agent with an extra warning for agentic agents, a dedicated *AI models* page, and a per-agent model override in the behavior editor.
+- **Access:** anyone in the workspace can see which model is serving them; only the owner can add, test, remove or reassign keys.
+- **Tests:** routing, resolver, OpenAI-compatible and Anthropic wire format, key-safe error messages, 14 end-to-end tests (storage and encryption, rejected keys, SSRF, owner-only, tenant scoping, serving on the tenant's key, per-agent override, failover and invalid flagging, fallback disabled, cross-tenant key in an agent spec, summaries on the tenant's key, deletion, re-test, audit), banner and editor component tests.
+
+**Not built yet:** voice (STT/TTS) BYOK; per-key monthly spend/token caps and per-conversation budgets; a circuit breaker; encryption key versioning and rotation; enforcing the tighter limits on the shared model that 17.5.2 allows (the gap is currently communicated, not enforced); a side-by-side model comparison in a simulator; a capability registry that blocks a model unsuited to tool calling; Azure/Bedrock/Vertex native adapters (reachable only through an OpenAI-compatible gateway). Anthropic, OpenAI and Gemini adapters are covered by wire-format unit tests but have not been run against the live providers.
 
 **Not built yet.** Today the LLM, STT and TTS providers are single process-wide instances chosen by env vars (`LLM_PROVIDER`, `STT_PROVIDER`, `TTS_PROVIDER`) and use the platform's own keys; the default is the mock. Every tenant therefore gets the same model, and the platform pays for all inference.
 

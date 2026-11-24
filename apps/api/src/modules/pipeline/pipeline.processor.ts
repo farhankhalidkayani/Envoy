@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Worker, type Job } from "bullmq";
 import { PrismaService } from "../core/prisma/prisma.service.js";
+import { runWithModelContext } from "../models/model-context.js";
 import { LLM_PROVIDER } from "../agent/providers/llm/llm-provider.module.js";
 import type { LlmProvider } from "../agent/providers/llm/types.js";
 import { createPipelineRedisConnection } from "./pipeline-connection.js";
@@ -63,14 +64,24 @@ export class PipelineProcessor implements OnModuleInit, OnModuleDestroy {
     const { conversationId, messages } = job.data;
     const transcriptText = assembleTranscript(messages);
 
-    const { text: aiSummary } = await this.llm.complete({
-      purpose: "summarize",
-      messages: [
-        { role: "system", content: SUMMARY_INSTRUCTIONS },
-        { role: "user", content: transcriptText || "(empty conversation)" },
-      ],
-      maxTokens: 200,
+    // The summary is the tenant's own usage: bill it to their key (and honour the agent's model override).
+    const owner = await this.prisma.client.conversation.findUnique({
+      where: { id: conversationId },
+      select: { tenantId: true, agent: { select: { spec: true } } },
     });
+    const agentModels = (owner?.agent.spec as { models?: Record<string, never> } | null)?.models;
+    const summarize = () =>
+      this.llm.complete({
+        purpose: "summarize",
+        messages: [
+          { role: "system", content: SUMMARY_INSTRUCTIONS },
+          { role: "user", content: transcriptText || "(empty conversation)" },
+        ],
+        maxTokens: 200,
+      });
+    const { text: aiSummary } = owner
+      ? await runWithModelContext({ tenantId: owner.tenantId, agentModels }, summarize)
+      : await summarize();
 
     await this.prisma.client.conversation.update({
       where: { id: conversationId },

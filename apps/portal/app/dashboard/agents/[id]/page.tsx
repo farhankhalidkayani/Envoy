@@ -5,10 +5,11 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import type { Agent } from "@envoy/sdk";
 import type { AgentSpec, WidgetConfig } from "@envoy/types";
-import type { Form } from "@envoy/sdk";
+import type { Form, ModelCredential } from "@envoy/sdk";
 import { WidgetSettings } from "../../../../components/widget/WidgetSettings";
 import { RequiredFieldsBuilder } from "../../../../components/agent/RequiredFieldsBuilder";
 import { AgentBehaviorEditor } from "../../../../components/agent/AgentBehaviorEditor";
+import { ModelBadge } from "../../../../components/models/ModelBadge";
 import { VersionHistory } from "../../../../components/agent/VersionHistory";
 import { newId } from "@envoy/builder";
 import type { FieldRow } from "../../../../lib/agent-fields";
@@ -40,6 +41,7 @@ export default function AgentDetailPage() {
   const [spec, setSpec] = useState<AgentSpec | null>(null);
   const [leadFormId, setLeadFormId] = useState<string | null>(null);
   const [forms, setForms] = useState<Form[]>([]);
+  const [credentials, setCredentials] = useState<ModelCredential[]>([]);
 
   // Persists across React StrictMode's dev-only double-invoke of this effect
   // (mount → cleanup → mount) — a ref, unlike a local `cancelled` flag, is
@@ -79,6 +81,7 @@ export default function AgentDetailPage() {
     // Forms failing to load shouldn't block the rest of the page — the
     // lead-form selector just falls back to "no forms available" (empty list).
     api.forms.list().then(setForms).catch(() => {});
+    api.models.listCredentials().then((c) => setCredentials(c.filter((k) => k.status === "active"))).catch(() => {});
   }, [params.id]);
 
   async function toggleLive() {
@@ -166,6 +169,8 @@ export default function AgentDetailPage() {
           {agent.status === "live" ? "Pause" : "Publish"}
         </button>
       </div>
+
+      <ModelBadge agentic={spec?.runtime.mode === "agentic"} override={Object.keys(spec?.models ?? {}).some((k) => k !== "allowPlatformFallback")} />
 
       <div className="card" style={{ marginBottom: 16 }}>
         <strong style={{ fontSize: 13.5, display: "block", marginBottom: 8 }}>Embed snippet</strong>
@@ -266,7 +271,7 @@ export default function AgentDetailPage() {
           ))}
         </div>
 
-        {spec && <AgentBehaviorEditor spec={spec} onChange={setSpec} />}
+        {spec && <AgentBehaviorEditor spec={spec} onChange={setSpec} credentials={credentials} />}
 
         {widgetConfig && (
           <WidgetSettings

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  parseAnthropicResponse,
+  toAnthropicShape,
   parseGeminiToolResponse,
   parseOpenAiToolResponse,
   toGeminiToolShape,
@@ -78,5 +80,48 @@ describe("Gemini wire", () => {
     });
     expect(parsed.text).toBe("ok ");
     expect(parsed.toolCalls).toEqual([{ id: "call_0", name: "end_conversation", arguments: { outcomeType: "order" } }]);
+  });
+});
+
+describe("Anthropic wire", () => {
+  it("splits system text and maps tool calls to tool_use blocks and results to tool_result blocks", () => {
+    const { system, messages } = toAnthropicShape(history);
+    expect(system).toBe("sys");
+    expect(messages[0]).toEqual({ role: "user", content: "my email is a@b.co" });
+    expect(messages[1]).toEqual({
+      role: "assistant",
+      content: [{ type: "tool_use", id: "c1", name: "capture_field", input: { key: "email", value: "a@b.co" } }],
+    });
+    expect(messages[2]).toEqual({ role: "user", content: [{ type: "tool_result", tool_use_id: "c1", content: '{"ok":true}' }] });
+  });
+
+  it("keeps assistant text alongside tool calls and groups parallel results in one user message", () => {
+    const { messages } = toAnthropicShape([
+      { role: "user", content: "hi" },
+      { role: "assistant", content: "Checking.", toolCalls: [{ id: "a", name: "t1", arguments: {} }, { id: "b", name: "t2", arguments: {} }] },
+      { role: "tool", content: "1", toolCallId: "a", toolName: "t1" },
+      { role: "tool", content: "2", toolCallId: "b", toolName: "t2" },
+    ]);
+    expect((messages[1]!.content as unknown[])[0]).toEqual({ type: "text", text: "Checking." });
+    expect(messages).toHaveLength(3);
+    expect(messages[2]!.content as unknown[]).toHaveLength(2);
+  });
+
+  it("never emits an empty text block", () => {
+    const { messages } = toAnthropicShape([{ role: "assistant", content: "", toolCalls: [{ id: "a", name: "t", arguments: {} }] }]);
+    expect(JSON.stringify(messages)).not.toContain('"text":""');
+  });
+
+  it("parses text, tool_use and usage", () => {
+    expect(
+      parseAnthropicResponse({
+        content: [{ type: "text", text: "ok" }, { type: "tool_use", id: "x", name: "end_conversation", input: { outcomeType: "order" } }],
+        usage: { input_tokens: 10, output_tokens: 4 },
+      }),
+    ).toEqual({
+      text: "ok",
+      toolCalls: [{ id: "x", name: "end_conversation", arguments: { outcomeType: "order" } }],
+      usage: { inputTokens: 10, outputTokens: 4 },
+    });
   });
 });
