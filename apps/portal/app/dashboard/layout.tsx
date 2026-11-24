@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
-import { BotIcon, ChatIcon, SyncIcon, CardIcon, PlugIcon, FormIcon, UsersIcon, SettingsIcon, LogoMark, LogOutIcon, CpuIcon } from "../../components/icons";
+import { BotIcon, ChatIcon, SyncIcon, CardIcon, PlugIcon, FormIcon, UsersIcon, SettingsIcon, LogoMark, LogOutIcon, CpuIcon, KeyIcon } from "../../components/icons";
 import { ThemeToggle } from "../../components/ThemeToggle";
 import { ModelBanner } from "../../components/models/ModelBanner";
 
@@ -17,6 +17,7 @@ const NAV = [
   { href: "/dashboard/crm", label: "CRM", icon: SyncIcon },
   { href: "/dashboard/integrations", label: "Integrations", icon: PlugIcon },
   { href: "/dashboard/models", label: "AI models", icon: CpuIcon },
+  { href: "/dashboard/api-access", label: "API & MCP", icon: KeyIcon },
   { href: "/dashboard/billing", label: "Billing", icon: CardIcon },
   { href: "/dashboard/settings", label: "Settings", icon: SettingsIcon },
 ];

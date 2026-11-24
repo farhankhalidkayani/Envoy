@@ -88,6 +88,7 @@ model Tenant {
   scenarioRuns     ScenarioRun[]
   insights         Insight[]
   proposals        Proposal[]
+  apiTokens        ApiToken[]
 
   @@map("tenants")
 }
@@ -105,6 +106,7 @@ model User {
   updatedAt       DateTime  @updatedAt
 
   auditLogs          AuditLog[]
+  apiTokens          ApiToken[]
   sessions           Session[]
   verificationTokens VerificationToken[]
 
@@ -607,4 +609,32 @@ model Proposal {
   @@index([agentId, createdAt])
   @@index([tenantId])
   @@map("proposals")
+}
+
+// ─────────────────────────────────────────────────────────────
+// API tokens — how outside programs and AI agents (via MCP) act on a workspace
+// ─────────────────────────────────────────────────────────────
+
+/// A scoped, revocable credential that acts as the user who created it, never as more than they can do.
+/// Only the SHA-256 of the secret is stored; the secret itself is shown once, at creation.
+model ApiToken {
+  id         String    @id @default(cuid())
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  tokenHash  String    @unique
+  /// For recognising a token in a list — the secret's last four characters.
+  last4      String
+  /// e.g. ["agents:read", "agents:write"] — see API_TOKEN_SCOPES in @envoy/types.
+  scopes     String[]
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([tenantId])
+  @@index([userId])
+  @@map("api_tokens")
 }

@@ -10,4 +10,6 @@ export interface JwtPayload {
 /** Express Request augmented with the authenticated principal. */
 export interface AuthenticatedRequest extends Request {
   user: JwtPayload;
+  /** Set only when the request authenticated with an API token (never for a signed-in person's JWT). */
+  apiToken?: { id: string; name: string; scopes: string[] };
 }

@@ -123,6 +123,15 @@ export function CpuIcon({ size = 18 }: IconProps) {
   );
 }
 
+export function KeyIcon({ size = 18 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...base}>
+      <circle cx="8" cy="15" r="4" />
+      <path d="M11 12l9-9M16 7l3 3M14 9l2 2" />
+    </svg>
+  );
+}
+
 export function SunIcon({ size = 18 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" {...base}>

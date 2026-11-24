@@ -427,3 +427,19 @@ export interface Proposal {
   /** The agent has changed since this was drafted, so it can no longer be tested or approved. */
   stale: boolean;
 }
+
+export interface ApiToken {
+  id: string;
+  name: string;
+  last4: string;
+  scopes: string[];
+  expiresAt: string;
+  revokedAt: string | null;
+  lastUsedAt: string | null;
+  createdAt: string;
+}
+
+/** Returned once, at creation: `token` is the only time the secret is ever visible. */
+export interface CreatedApiToken extends ApiToken {
+  token: string;
+}

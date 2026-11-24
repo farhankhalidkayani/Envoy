@@ -1,11 +1,11 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, ForbiddenException, Get, Param, ParseIntPipe, Patch, Post, Req, UseGuards } from "@nestjs/common";
 import { z } from "zod";
-import { AgentSpec, AgentStatus, HardRulesSpec, RequiredFieldsSpec, WidgetConfig } from "@envoy/types";
+import { forbiddenAgentEditForToken, AgentSpec, AgentStatus, HardRulesSpec, RequiredFieldsSpec, WidgetConfig } from "@envoy/types";
 import { CurrentUser } from "../core/auth/decorators/current-user.decorator.js";
 import { FeatureGuard } from "../core/auth/guards/feature.guard.js";
 import { JwtAuthGuard } from "../core/auth/guards/jwt-auth.guard.js";
 import { TenantScopeGuard } from "../core/auth/guards/tenant-scope.guard.js";
-import type { JwtPayload } from "../core/auth/types.js";
+import type { AuthenticatedRequest, JwtPayload } from "../core/auth/types.js";
 import { ZodValidationPipe } from "../core/common/zod-validation.pipe.js";
 import { TenantLockGuard } from "../billing/guards/tenant-lock.guard.js";
 import { AgentsService } from "./agents.service.js";
@@ -33,11 +33,22 @@ const UpdateAgentDto = CreateAgentDto.partial().merge(UpdateOnlyDto).extend({
 export class AgentsController {
   constructor(private readonly agents: AgentsService) {}
 
+  /** Edits made with an API token (e.g. by an AI agent over MCP) can't touch hard rules, publish, or switch on CRM/calendar tools. */
+  private async guardTokenEdit(req: AuthenticatedRequest, body: Parameters<typeof forbiddenAgentEditForToken>[0], tenantId: string, agentId?: string) {
+    if (!req.apiToken) return;
+    const current = agentId && body.spec ? await this.agents.findOneScoped(tenantId, agentId) : undefined;
+    const enabled = new Set((current ? AgentSpec.parse(current.spec).tools : []).filter((t) => t.enabled).map((t) => t.name));
+    const reason = forbiddenAgentEditForToken(body, enabled);
+    if (reason) throw new ForbiddenException(reason);
+  }
+
   @Post()
-  create(
+  async create(
+    @Req() req: AuthenticatedRequest,
     @CurrentUser() user: JwtPayload,
     @Body(new ZodValidationPipe(CreateAgentDto)) body: z.infer<typeof CreateAgentDto>,
   ) {
+    await this.guardTokenEdit(req, body, user.tenantId!);
     return this.agents.create(user.tenantId!, body);
   }
 
@@ -62,11 +73,13 @@ export class AgentsController {
   }
 
   @Patch(":id")
-  update(
+  async update(
+    @Req() req: AuthenticatedRequest,
     @CurrentUser() user: JwtPayload,
     @Param("id") id: string,
     @Body(new ZodValidationPipe(UpdateAgentDto)) body: z.infer<typeof UpdateAgentDto>,
   ) {
+    await this.guardTokenEdit(req, body, user.tenantId!, id);
     return this.agents.update(user.tenantId!, id, body);
   }
 }

@@ -5,8 +5,10 @@ import type {
   Agent,
   AgentMetrics,
   AgentVersion,
+  ApiToken,
   AuditLogEntry,
   AuthResult,
+  CreatedApiToken,
   BillingUsage,
   CalendarIntegrationConfig,
   Conversation,
@@ -218,6 +220,12 @@ export function createApiClient(config: ApiClientConfig) {
         history: (id: string, limit = 30) => request<ScenarioRunRecord[]>(`/agents/${id}/scenarios/runs`, { query: { limit: String(limit) } }),
         getRun: (id: string, runId: string) => request<ScenarioRunRecord>(`/agents/${id}/scenarios/runs/${runId}`),
       },
+    },
+
+    tokens: {
+      list: () => request<ApiToken[]>("/tokens"),
+      create: (input: { name: string; scopes: string[]; expiresInDays?: number }) => request<CreatedApiToken>("/tokens", { method: "POST", body: input }),
+      revoke: (id: string) => request<{ revoked: true }>(`/tokens/${id}`, { method: "DELETE" }),
     },
 
     models: {
