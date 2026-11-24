@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { MoonIcon, SunIcon } from "./icons";
 
 const STORAGE_KEY = "envoy-theme";
 type Theme = "light" | "dark" | null; // null = follow the OS preference
@@ -60,7 +61,7 @@ export function ThemeToggle() {
       title={isDark ? "Switch to light mode" : "Switch to dark mode"}
       onClick={() => apply(isDark ? "light" : "dark")}
     >
-      {isDark ? "☀" : "☾"}
+      {isDark ? <SunIcon size={16} /> : <MoonIcon size={16} />}
     </button>
   );
 }

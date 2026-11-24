@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
-import { BotIcon, ChatIcon, SyncIcon, CardIcon, PlugIcon, FormIcon, UsersIcon, SettingsIcon, LogoMark } from "../../components/icons";
+import { BotIcon, ChatIcon, SyncIcon, CardIcon, PlugIcon, FormIcon, UsersIcon, SettingsIcon, LogoMark, LogOutIcon } from "../../components/icons";
 import { ThemeToggle } from "../../components/ThemeToggle";
 
 const NAV = [
@@ -86,10 +86,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             <span className="app-sidebar-avatar">{initial}</span>
             <span className="app-sidebar-user-email">{user.email}</span>
           </div>
-          <div style={{ display: "flex", gap: 6 }}>
+          <div className="app-sidebar-footer-actions">
             <ThemeToggle />
-            <button onClick={logout} className="btn" style={{ flex: 1 }}>
-              Sign out
+            <button onClick={logout} className="btn" title="Sign out" style={{ flex: 1 }}>
+              <LogOutIcon size={15} />
+              <span className="nav-link-label">Sign out</span>
             </button>
           </div>
         </div>
