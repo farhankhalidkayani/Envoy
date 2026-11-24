@@ -84,6 +84,8 @@ model Tenant {
   auditLogs       AuditLog[]
   modelCredentials ModelCredential[]
   modelUsage       ModelUsage[]
+  scenarios        Scenario[]
+  scenarioRuns     ScenarioRun[]
 
   @@map("tenants")
 }
@@ -185,6 +187,8 @@ model Agent {
 
   conversations Conversation[]
   versions      AgentVersion[]
+  scenarios     Scenario[]
+  scenarioRuns  ScenarioRun[]
 
   @@index([tenantId])
   @@index([leadFormId])
@@ -472,4 +476,59 @@ model ModelUsage {
 
   @@index([tenantId, createdAt])
   @@map("model_usage")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Scenarios — scripted-visitor regression tests for an agent
+// ─────────────────────────────────────────────────────────────
+
+/// A scripted visitor plus what must be true afterwards (ScenarioDef in @envoy/types).
+model Scenario {
+  id          String        @id @default(cuid())
+  tenantId    String
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  agentId     String
+  agent       Agent         @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  /// string[] — what the simulated visitor says, in order.
+  turns       Json
+  expect      Json          @default("{}")
+  sandbox     Json          @default("{}")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  runs        ScenarioRun[]
+
+  @@index([agentId])
+  @@index([tenantId])
+  @@map("scenarios")
+}
+
+/// One execution of one scenario. Runs are simulations: they never create a Conversation, lead, CRM push or billable usage.
+model ScenarioRun {
+  id           String    @id @default(cuid())
+  tenantId     String
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  agentId      String
+  agent        Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  /// Null once the scenario is deleted — the run's own copy of the name stays in `result`.
+  scenarioId   String?
+  scenario     Scenario? @relation(fields: [scenarioId], references: [id], onDelete: SetNull)
+  /// Which AgentVersion ran — so "passing" always means "passing on this version".
+  agentVersion Int
+  /// "current" or the label of a model variant being compared.
+  variant      String    @default("current")
+  passed       Boolean
+  /// Set when the run itself failed (model error), as opposed to expectations failing.
+  error        String?
+  /// { name, transcript, checks, outcome, steps, route, tokens }
+  result       Json
+  latencyMs    Int
+  inputTokens  Int       @default(0)
+  outputTokens Int       @default(0)
+  createdAt    DateTime  @default(now())
+
+  @@index([agentId, createdAt])
+  @@index([tenantId, createdAt])
+  @@map("scenario_runs")
 }

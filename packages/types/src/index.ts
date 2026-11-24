@@ -8,3 +8,4 @@ export * from "./ws.js";
 export * from "./form-schema.js";
 export * from "./agent-spec.js";
 export * from "./models.js";
+export * from "./scenario.js";

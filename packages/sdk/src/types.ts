@@ -1,5 +1,9 @@
 import type {
   AgentSpec,
+  OutcomeType as OutcomeTypeName,
+  ScenarioCheck,
+  ScenarioDef,
+  ScenarioOutcome,
   ModelConfig,
   ModelProviderKind,
   ModelRole,
@@ -280,4 +284,72 @@ export interface ModelUsageSummary {
     outputTokens: number;
     avgLatencyMs: number;
   }>;
+}
+
+/** One visitor message into the playground, and what the agent did about it. */
+export interface SimulationTurn {
+  sessionId: string;
+  agentVersion: number;
+  reply: string;
+  isComplete: boolean;
+  outcomeType?: OutcomeTypeName;
+  handoffReason?: string;
+  capturedData: Record<string, unknown>;
+  goalProgress: GoalProgressMap;
+  blockedViolations: number;
+  steps: Array<{ turn: number; seq: number; kind: RunStepKind; name: string; input?: unknown; output?: unknown; error?: string; latencyMs?: number }>;
+}
+
+export interface Scenario extends ScenarioDef {
+  id: string;
+  createdAt: string;
+  /** Latest run of this scenario on the agent as currently configured ("current" variant). */
+  lastRun: { id: string; passed: boolean; error: string | null; agentVersion: number; createdAt: string; onCurrentVersion: boolean } | null;
+}
+
+export interface ScenarioStatus {
+  agentVersion: number;
+  total: number;
+  passing: number;
+  failing: number;
+  notRun: number;
+}
+
+export interface ScenarioRunResult {
+  variant: string;
+  scenarioId: string;
+  name: string;
+  runId: string;
+  passed: boolean;
+  error?: string;
+  checks: ScenarioCheck[];
+  tokens: { calls: number; inputTokens: number; outputTokens: number };
+  latencyMs: number;
+}
+
+export interface ScenarioRunReport {
+  agentVersion: number;
+  variants: Array<{ label: string; passed: number; total: number; inputTokens: number; outputTokens: number; avgLatencyMs: number }>;
+  results: ScenarioRunResult[];
+}
+
+export interface ScenarioRunRecord {
+  id: string;
+  scenarioId: string | null;
+  agentVersion: number;
+  variant: string;
+  passed: boolean;
+  error: string | null;
+  latencyMs: number;
+  inputTokens: number;
+  outputTokens: number;
+  createdAt: string;
+  result: {
+    name: string;
+    transcript: Array<{ role: "visitor" | "agent"; text: string }>;
+    checks: ScenarioCheck[];
+    outcome: ScenarioOutcome;
+    steps: SimulationTurn["steps"];
+    route: { provider: string; model: string; keySource: "tenant" | "platform"; failedOver?: boolean } | null;
+  };
 }

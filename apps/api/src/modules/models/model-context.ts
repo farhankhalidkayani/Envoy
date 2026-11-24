@@ -20,6 +20,8 @@ export interface ModelContext {
   agentModels?: Partial<ModelConfig>;
   /** The route the most recent call took — read by the agent loop for its trace. */
   lastRoute?: ModelRoute;
+  /** Running token/call totals for everything routed in this context — used to cost a scenario run. */
+  totals?: { calls: number; inputTokens: number; outputTokens: number };
   /** Per-context memo so one turn costs one config read, not one per model call. */
   _tenant?: Promise<unknown>;
   _touched?: Set<string>;

@@ -1,4 +1,4 @@
-import type { AgentSpec, ApiOptionsSource, ModelConfig, ModelProviderKind, FeatureAccess, FormOption, FormSchema, PriceConfig } from "@envoy/types";
+import type { AgentSpec, ApiOptionsSource, ScenarioDef, ModelConfig, ModelProviderKind, FeatureAccess, FormOption, FormSchema, PriceConfig } from "@envoy/types";
 import type {
   AdminTenant,
   AdminTenantDetail,
@@ -21,6 +21,11 @@ import type {
   ModelUsageSummary,
   PublicForm,
   RunStep,
+  Scenario,
+  ScenarioRunRecord,
+  ScenarioRunReport,
+  ScenarioStatus,
+  SimulationTurn,
   Subscription,
   WebhookIntegrationConfig,
 } from "./types";
@@ -178,6 +183,24 @@ export function createApiClient(config: ApiClientConfig) {
       versions: (id: string) => request<AgentVersion[]>(`/agents/${id}/versions`),
       restoreVersion: (id: string, version: number) =>
         request<Agent>(`/agents/${id}/versions/${version}/restore`, { method: "POST" }),
+      /** One visitor message in the playground. Omit sessionId to start a new simulated conversation. */
+      simulate: (id: string, message: string, sessionId?: string, sandbox?: ScenarioDef["sandbox"]) =>
+        request<SimulationTurn>(`/agents/${id}/simulate`, { method: "POST", body: { message, sessionId, sandbox } }),
+      resetSimulation: (id: string, sessionId: string) =>
+        request<{ reset: true }>(`/agents/${id}/simulate/${sessionId}`, { method: "DELETE" }),
+      scenarios: {
+        list: (id: string) => request<Scenario[]>(`/agents/${id}/scenarios`),
+        status: (id: string) => request<ScenarioStatus>(`/agents/${id}/scenarios/status`),
+        create: (id: string, def: ScenarioDef) => request<{ id: string }>(`/agents/${id}/scenarios`, { method: "POST", body: def }),
+        update: (id: string, scenarioId: string, def: Partial<ScenarioDef>) =>
+          request<{ id: string }>(`/agents/${id}/scenarios/${scenarioId}`, { method: "PATCH", body: def }),
+        remove: (id: string, scenarioId: string) => request<{ deleted: true }>(`/agents/${id}/scenarios/${scenarioId}`, { method: "DELETE" }),
+        /** Run the suite (or some of it), once per variant — several variants is a side-by-side model comparison. */
+        run: (id: string, opts: { scenarioIds?: string[]; variants?: Array<{ label: string; models?: unknown }> } = {}) =>
+          request<ScenarioRunReport>(`/agents/${id}/scenarios/run`, { method: "POST", body: opts }),
+        history: (id: string, limit = 30) => request<ScenarioRunRecord[]>(`/agents/${id}/scenarios/runs`, { query: { limit: String(limit) } }),
+        getRun: (id: string, runId: string) => request<ScenarioRunRecord>(`/agents/${id}/scenarios/runs/${runId}`),
+      },
     },
 
     models: {

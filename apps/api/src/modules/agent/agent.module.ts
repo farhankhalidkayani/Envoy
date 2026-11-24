@@ -12,6 +12,9 @@ import { ConversationEngineService } from "./conversation/conversation-engine.se
 import { ConversationSessionStore } from "./conversation/conversation-session.store.js";
 import { ConversationsController } from "./conversation/conversations.controller.js";
 import { ConversationsService } from "./conversation/conversations.service.js";
+import { ScenariosService } from "./simulation/scenarios.service.js";
+import { SimulationController } from "./simulation/simulation.controller.js";
+import { SimulationService } from "./simulation/simulation.service.js";
 import { AgentGateway } from "./gateway/agent.gateway.js";
 import { LlmProviderModule } from "./providers/llm/llm-provider.module.js";
 import { VoiceProviderModule } from "./providers/voice/voice-provider.module.js";
@@ -37,7 +40,7 @@ import { ToolRegistry } from "./runtime/tool-registry.js";
     CrmModule,
     IntegrationsModule,
   ],
-  controllers: [AgentsController, PublicAgentsController, ConversationsController],
+  controllers: [AgentsController, PublicAgentsController, ConversationsController, SimulationController],
   providers: [
     AgentsService,
     ConversationSessionStore,
@@ -46,6 +49,8 @@ import { ToolRegistry } from "./runtime/tool-registry.js";
     FieldExtractorService,
     ToolRegistry,
     AgentLoopService,
+    SimulationService,
+    ScenariosService,
     ConversationEngineService,
     AgentGateway,
   ],

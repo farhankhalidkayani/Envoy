@@ -1,7 +1,6 @@
-import { Logger } from "@nestjs/common";
 import type { Prisma } from "@envoy/db";
 import type { RunStepKind } from "@envoy/types";
-import type { PrismaService } from "../../core/prisma/prisma.service.js";
+import type { RunSink } from "./run-sink.js";
 
 export interface RecordedStep {
   kind: RunStepKind;
@@ -22,18 +21,13 @@ function clip(value: unknown): Prisma.InputJsonValue | undefined {
   return { truncated: true, preview: json.slice(0, MAX_JSON_CHARS) };
 }
 
-/**
- * Buffers one visitor turn's steps and writes them in a single insert. Trace
- * writing is observability, not correctness: a failure here is logged and
- * swallowed so it can never break a live conversation.
- */
+/** Buffers one visitor turn's steps and hands them to the run's sink in one write. */
 export class TurnRecorder {
-  private readonly logger = new Logger(TurnRecorder.name);
   private readonly steps: RecordedStep[] = [];
 
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly ids: { conversationId: string; tenantId: string; turn: number; startSeq: number },
+    private readonly sink: RunSink,
+    private readonly ids: { turn: number; startSeq: number },
   ) {}
 
   record(step: RecordedStep) {
@@ -46,25 +40,17 @@ export class TurnRecorder {
   }
 
   async flush(): Promise<void> {
-    if (this.steps.length === 0) return;
-    try {
-      await this.prisma.client.agentRunStep.createMany({
-        data: this.steps.map((s, i) => ({
-          conversationId: this.ids.conversationId,
-          tenantId: this.ids.tenantId,
-          turn: this.ids.turn,
-          seq: this.ids.startSeq + i,
-          kind: s.kind,
-          name: s.name,
-          input: clip(s.input),
-          output: clip(s.output),
-          error: s.error?.slice(0, 500),
-          latencyMs: s.latencyMs,
-        })),
-        skipDuplicates: true,
-      });
-    } catch (err) {
-      this.logger.warn(`failed to write run trace: ${(err as Error).message}`);
-    }
+    await this.sink.writeSteps(
+      this.steps.map((s, i) => ({
+        turn: this.ids.turn,
+        seq: this.ids.startSeq + i,
+        kind: s.kind,
+        name: s.name,
+        input: clip(s.input),
+        output: clip(s.output),
+        error: s.error?.slice(0, 500),
+        latencyMs: s.latencyMs,
+      })),
+    );
   }
 }

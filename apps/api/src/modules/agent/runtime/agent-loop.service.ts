@@ -13,11 +13,25 @@ import type { LlmMessage, LlmProvider, LlmToolCall } from "../providers/llm/type
 import { RuleEnforcerService } from "../rules/rule-enforcer.service.js";
 import { buildAgenticMessages } from "./agentic-prompt.js";
 import { missingRequiredKeys } from "./built-in-tools.js";
-import { currentModelContext } from "../../models/model-context.js";
+import { currentModelContext, type ModelContext } from "../../models/model-context.js";
 import { RunState } from "./run-state.js";
 import { TurnRecorder } from "./run-recorder.js";
+import { DbRunSink, type RunSink } from "./run-sink.js";
 import { ToolRegistry } from "./tool-registry.js";
 import type { ToolServices } from "./tool.js";
+
+/**
+ * Passed only by the playground and scenario runner. Side effects go to
+ * `sink` instead of the database, and the tenant's CRM/calendar are replaced
+ * by `services` (a sandbox) — so a simulation can't book a real meeting,
+ * read a real contact, or leave a trace on a real conversation.
+ */
+export interface SimulationHooks {
+  sink: RunSink;
+  services: ToolServices;
+  /** The caller's own model context, so it can read back token totals and the route taken. */
+  modelContext?: ModelContext;
+}
 
 export interface AgenticTurnResult {
   visibleText: string;
@@ -59,6 +73,7 @@ export class AgentLoopService {
     tenantId: string;
     config: AgentPromptConfig;
     userText: string;
+    simulation?: SimulationHooks;
   }): Promise<AgenticTurnResult> {
     const { conversationId, config } = params;
     const spec = AgentSpec.parse(config.spec ?? {});
@@ -73,22 +88,21 @@ export class AgentLoopService {
       { ...(session.goalProgress ?? {}) },
       { ...(session.toolCallCounts ?? {}) },
     );
-    const recorder = new TurnRecorder(this.prisma, {
-      conversationId,
-      tenantId: params.tenantId,
-      turn,
-      startSeq: session.stepSeq ?? 0,
-    });
+    const sink = params.simulation?.sink ?? new DbRunSink(this.prisma, this.conversations, { conversationId, tenantId: params.tenantId });
+    const recorder = new TurnRecorder(sink, { turn, startSeq: session.stepSeq ?? 0 });
 
     // Only look up connections for tools the tenant actually opted into — no extra queries for agents that don't use them.
     const wants = (name: string) => spec.tools.some((t) => t.name === name && t.enabled);
-    const connections = {
-      crm: wants("lookup_crm_contact") && (await this.crm.getConnection(params.tenantId)) !== null,
-      calendar:
-        (wants("check_calendar_availability") || wants("book_meeting")) &&
-        (await this.integrations.hasCalendar(params.tenantId)),
-    };
-    const services = this.servicesFor(params.tenantId);
+    // A simulation runs against a sandbox, so it needs no real connection to try the tools.
+    const connections = params.simulation
+      ? { crm: true, calendar: true }
+      : {
+          crm: wants("lookup_crm_contact") && (await this.crm.getConnection(params.tenantId)) !== null,
+          calendar:
+            (wants("check_calendar_availability") || wants("book_meeting")) &&
+            (await this.integrations.hasCalendar(params.tenantId)),
+        };
+    const services = params.simulation?.services ?? this.servicesFor(params.tenantId);
     const baseToolConfig = { requiredFields: config.requiredFields, goals: spec.goals, connections };
     const tools = this.registry.resolve(spec, baseToolConfig);
     const toolConfig = this.registry.toolConfig(tools, baseToolConfig);
@@ -177,7 +191,7 @@ export class AgentLoopService {
         output: { violations: violations.map((v) => ({ ruleId: v.ruleId, action: v.action })) },
       });
     }
-    if (violations.length > 0) await this.conversations.appendViolations(conversationId, violations);
+    if (violations.length > 0) await sink.appendViolations(violations);
 
     const { visibleText } = stripCompletionMarker(finalText);
 
@@ -201,11 +215,7 @@ export class AgentLoopService {
       turn,
       stepSeq: recorder.nextSeq,
     });
-    if (Object.keys(run.goalProgress).length > 0) {
-      await this.prisma.client.conversation
-        .update({ where: { id: conversationId }, data: { goalProgress: run.goalProgress } })
-        .catch((err: Error) => this.logger.warn(`failed to persist goal progress: ${err.message}`));
-    }
+    if (Object.keys(run.goalProgress).length > 0) await sink.setGoalProgress(run.goalProgress);
 
     const terminal = run.terminal;
     const outcome = terminal?.kind === "end" ? OutcomeTypeSchema.safeParse(terminal.outcomeType) : undefined;

@@ -11,7 +11,7 @@ import { stripCompletionMarker } from "../providers/llm/prompt-markers.js";
 import type { LlmMessage, LlmProvider } from "../providers/llm/types.js";
 import { runWithModelContext } from "../../models/model-context.js";
 import { RuleEnforcerService } from "../rules/rule-enforcer.service.js";
-import { AgentLoopService } from "../runtime/agent-loop.service.js";
+import { AgentLoopService, type SimulationHooks } from "../runtime/agent-loop.service.js";
 import { ConversationSessionStore } from "./conversation-session.store.js";
 import { ConversationsService } from "./conversations.service.js";
 
@@ -51,9 +51,11 @@ export class ConversationEngineService {
     tenantId: string;
     config: AgentPromptConfig;
     userText: string;
+    /** Set by the playground / scenario runner; absent for real visitors. */
+    simulation?: SimulationHooks;
   }): Promise<TurnResult> {
     // Every model call in this turn — reply, judge, extraction — routes to the tenant's own key/model when they set one.
-    return runWithModelContext({ tenantId: params.tenantId, agentModels: params.config.spec?.models }, () => this.handleTurn(params));
+    return runWithModelContext(params.simulation?.modelContext ?? { tenantId: params.tenantId, agentModels: params.config.spec?.models }, () => this.handleTurn(params));
   }
 
   private async handleTurn(params: {
@@ -61,6 +63,7 @@ export class ConversationEngineService {
     tenantId: string;
     config: AgentPromptConfig;
     userText: string;
+    simulation?: SimulationHooks;
   }): Promise<TurnResult> {
     // Agentic agents run the tool-using loop; everything else keeps the original single-completion turn.
     if (params.config.spec?.runtime.mode === "agentic") {
@@ -87,7 +90,7 @@ export class ConversationEngineService {
       regenerate: async (messages) => (await this.llm.complete({ purpose: "chat", messages })).text,
     });
     if (violations.length > 0) {
-      await this.conversations.appendViolations(params.conversationId, violations);
+      await (params.simulation ? params.simulation.sink.appendViolations(violations) : this.conversations.appendViolations(params.conversationId, violations));
     }
 
     const { visibleText, outcomeType: rawOutcomeType } = stripCompletionMarker(finalText);

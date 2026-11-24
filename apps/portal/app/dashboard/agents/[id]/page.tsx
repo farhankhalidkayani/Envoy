@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import type { Agent } from "@envoy/sdk";
 import type { AgentSpec, WidgetConfig } from "@envoy/types";
-import type { Form, ModelCredential } from "@envoy/sdk";
+import type { Form, ModelCredential, ScenarioRunReport, ScenarioStatus } from "@envoy/sdk";
 import { WidgetSettings } from "../../../../components/widget/WidgetSettings";
 import { RequiredFieldsBuilder } from "../../../../components/agent/RequiredFieldsBuilder";
 import { AgentBehaviorEditor } from "../../../../components/agent/AgentBehaviorEditor";
@@ -42,6 +42,9 @@ export default function AgentDetailPage() {
   const [leadFormId, setLeadFormId] = useState<string | null>(null);
   const [forms, setForms] = useState<Form[]>([]);
   const [credentials, setCredentials] = useState<ModelCredential[]>([]);
+  // Before publishing, make sure the saved scenarios pass on this version (see toggleLive).
+  const [gate, setGate] = useState<{ status: ScenarioStatus; report?: ScenarioRunReport } | null>(null);
+  const [gateRunning, setGateRunning] = useState(false);
 
   // Persists across React StrictMode's dev-only double-invoke of this effect
   // (mount → cleanup → mount) — a ref, unlike a local `cancelled` flag, is
@@ -84,18 +87,48 @@ export default function AgentDetailPage() {
     api.models.listCredentials().then((c) => setCredentials(c.filter((k) => k.status === "active"))).catch(() => {});
   }, [params.id]);
 
-  async function toggleLive() {
+  async function setStatus(nextStatus: "live" | "paused") {
     if (!agent) return;
     setPublishing(true);
     try {
-      const nextStatus = agent.status === "live" ? "paused" : "live";
       const updated = await api.agents.update(agent.id, { status: nextStatus });
       setAgent(updated);
+      setGate(null);
       showToast(nextStatus === "live" ? "Agent published." : "Agent paused.");
     } catch (err) {
       setError(errorMessage(err));
     } finally {
       setPublishing(false);
+    }
+  }
+
+  async function toggleLive() {
+    if (!agent) return;
+    if (agent.status === "live") return setStatus("paused");
+    // Publishing is where a regression reaches real visitors: if this agent has scenarios that haven't passed on
+    // its current version, say so first. (Skipped silently if the check itself fails — it never blocks publishing.)
+    try {
+      const status = await api.agents.scenarios.status(agent.id);
+      if (status.total > 0 && (status.failing > 0 || status.notRun > 0)) return setGate({ status });
+    } catch {
+      /* fall through to publish */
+    }
+    return setStatus("live");
+  }
+
+  async function runGate() {
+    if (!agent) return;
+    setGateRunning(true);
+    setError(null);
+    try {
+      const report = await api.agents.scenarios.run(agent.id);
+      const status = await api.agents.scenarios.status(agent.id);
+      if (report.results.every((r) => r.passed)) return setStatus("live");
+      setGate({ status, report });
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setGateRunning(false);
     }
   }
 
@@ -161,6 +194,8 @@ export default function AgentDetailPage() {
       {error && <div className="error-banner">{error}</div>}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <h1 className="page-title page-title--flush">{agent.name}</h1>
+        <span style={{ display: "flex", gap: 8 }}>
+        <Link href={`/dashboard/agents/${agent.id}/test`} className="btn">Test agent</Link>
         <button
           onClick={toggleLive}
           disabled={publishing}
@@ -168,7 +203,32 @@ export default function AgentDetailPage() {
         >
           {agent.status === "live" ? "Pause" : "Publish"}
         </button>
+        </span>
       </div>
+
+      {gate && (
+        <div className="card" style={{ marginBottom: 16, borderColor: "var(--warn)" }} role="alert">
+          <strong style={{ fontSize: 13.5, display: "block", marginBottom: 4 }}>
+            {gate.report ? "Some scenarios failed on this version" : "Your scenarios haven't passed on this version yet"}
+          </strong>
+          <p style={{ fontSize: 12.5, marginBottom: 8 }}>
+            v{gate.status.agentVersion}: {gate.status.passing} passing, {gate.status.failing} failing, {gate.status.notRun} not run.
+            {gate.report && " Failing:"}
+          </p>
+          {gate.report?.results.filter((r) => !r.passed).map((r) => (
+            <div key={r.runId} style={{ fontSize: 12.5, marginBottom: 4 }}>
+              <b>{r.name}</b>
+              {r.error ? <span style={{ color: "var(--stop)" }}> — {r.error}</span> : r.checks.filter((c) => !c.passed).map((c, i) => <div key={i} style={{ color: "var(--stop)", marginLeft: 12 }}>{c.name} — {c.detail}</div>)}
+            </div>
+          ))}
+          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+            <button type="button" className="btn btn-primary" disabled={gateRunning || publishing} onClick={runGate}>{gateRunning ? "Running scenarios…" : "Run scenarios, then publish"}</button>
+            <button type="button" className="btn" disabled={publishing} onClick={() => setStatus("live")}>Publish anyway</button>
+            <button type="button" className="btn" onClick={() => setGate(null)}>Cancel</button>
+            <Link href={`/dashboard/agents/${agent.id}/test`} className="btn">Open scenarios</Link>
+          </div>
+        </div>
+      )}
 
       <ModelBadge agentic={spec?.runtime.mode === "agentic"} override={Object.keys(spec?.models ?? {}).some((k) => k !== "allowPlatformFallback")} />
 

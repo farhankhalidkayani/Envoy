@@ -90,6 +90,7 @@ export class RoutedLlmProvider implements LlmProvider {
     ctx.lastRoute = { provider: this.platform.name, model, keySource: "platform", failedOver };
     try {
       const result = await call(this.platform);
+      this.total(ctx, result.usage);
       this.usage.record({ tenantId: ctx.tenantId, role, provider: this.platform.name, model, keySource: "platform", usage: result.usage, latencyMs: Date.now() - started, ok: true });
       return result;
     } catch (err) {
@@ -98,8 +99,16 @@ export class RoutedLlmProvider implements LlmProvider {
     }
   }
 
+  private total(ctx: ModelContext, usage?: LlmUsage) {
+    ctx.totals ??= { calls: 0, inputTokens: 0, outputTokens: 0 };
+    ctx.totals.calls += 1;
+    ctx.totals.inputTokens += usage?.inputTokens ?? 0;
+    ctx.totals.outputTokens += usage?.outputTokens ?? 0;
+  }
+
   private finish(ctx: ModelContext, role: ModelRole, t: TenantTarget, started: number, ok: boolean, usage?: LlmUsage) {
     ctx.lastRoute = { provider: t.provider, model: t.model, keySource: "tenant" };
+    this.total(ctx, usage);
     this.usage.record({
       tenantId: ctx.tenantId,
       credentialId: t.credentialId,
