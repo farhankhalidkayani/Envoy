@@ -841,7 +841,13 @@ Measure the harness by running a fixed set of simulated visitors (scripted perso
 - **Recommended presets** per use case, e.g. *Best quality*, *Balanced*, *Lowest cost*, *Voice-first*, each mapping roles to concrete models.
 - The agent **simulator and scenario suite (17.1.7)** can show a side-by-side comparison of the same scenarios on the default versus the tenant's chosen model (completion rate, rule violations, cost), so the recommendation is backed by evidence.
 - **Capability gating with guidance:** features that need strong tool calling or long context (some tools, multi-step loops, the improvement harness) warn when the selected model is too weak and suggest an upgrade instead of failing silently.
-- The platform's default model remains available so a tenant can start with zero setup (and the mock still exists for demos and tests).
+- **Decision (current phase): the platform's default model stays the default for every new tenant, and BYOK is very strongly recommended.** A tenant can start with zero setup, but the product consistently pushes them to connect their own key for good results (the mock still exists for demos and tests). Concretely:
+  - A persistent, prominent banner on the dashboard and agent page until a key is connected ("You're on the shared default model. Results will be noticeably weaker. Connect your own key.").
+  - A mandatory-looking but skippable step in onboarding, and a checklist item on the getting-started panel.
+  - A visible "Running on: shared default model" badge in the simulator, trace viewer and agent settings, with a one-click path to connect a key.
+  - Honest in-product quality warnings (e.g. weaker tool use, lower rule-compliance and extraction accuracy) wherever the default model limits a feature.
+  - The platform default may have tighter limits (smaller context, lower rate limits, fewer steps per turn, advanced features such as the improvement harness limited or in preview) so the gap is real and explained, not hidden.
+  - Revisit later: if inference cost becomes a problem, move to requiring a tenant key for premium agentic features, or sell platform-managed premium models as a paid add-on.
 
 #### 17.5.3 Architecture
 
@@ -879,7 +885,8 @@ Measure the harness by running a fixed set of simulated visitors (scripted perso
 - **FR-BYOK-3** A tenant can choose the model per role at workspace level and override it per agent.
 - **FR-BYOK-4** The system resolves the provider and credentials per call for every AI function (chat, extraction, judge, summary, voice, harness).
 - **FR-BYOK-5** The tenant can define a fallback order and whether fallback to the platform's models is permitted.
-- **FR-BYOK-6** The portal recommends connecting an own key and recommended model presets, and shows capability warnings for unsuitable models.
+- **FR-BYOK-6** The portal very strongly recommends connecting an own key (persistent banner, onboarding step, checklist, "running on shared default" badges) and offers recommended model presets, while keeping the platform default model as the zero-setup default; it shows capability warnings for unsuitable models.
+- **FR-BYOK-11** The platform default model applies documented limits (context, rate, steps per turn, advanced-feature availability) that are disclosed to the tenant in the product.
 - **FR-BYOK-7** Tenant can set spend or token caps; the harness enforces them and surfaces provider errors clearly.
 - **FR-BYOK-8** Usage and estimated cost are recorded per call with the key source; only platform-key usage is billed by Envoy.
 - **FR-BYOK-9** Custom provider base URLs are validated and fetched through SSRF protection.
