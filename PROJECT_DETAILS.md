@@ -421,6 +421,7 @@ pnpm dev                    # landing :3000, portal :3001, admin :3002, api :400
 - `packages/ui` is empty; portal and admin use their own components/styles.
 - CRM supports HubSpot only (Zoho was dropped in a later migration).
 - The leads feed uses a growing `limit` instead of a true cursor across two sources.
+- **Model choice is global, not per tenant.** The LLM, STT and TTS providers are single process-wide instances picked by env vars (`LLM_PROVIDER` etc.) using the platform's own keys. Tenants cannot bring their own keys or choose a model (section 17.5).
 - **The agent is not yet truly agentic.** Each turn is one LLM completion (`ConversationEngineService.handleUserMessage`): build prompt, generate, judge, extract fields. There is no tool calling, no multi-step reasoning loop, no explicit goals or planning, no memory beyond the session history, and no per-agent model or behaviour configuration beyond script, fields and rules. Section 17.1 plans the fix.
 
 **Future work**
@@ -810,7 +811,96 @@ Measure the harness by running a fixed set of simulated visitors (scripted perso
 - Cost of replay and evaluation, mitigated by sampling, caching and metering.
 - Prompt injection through visitor messages reaching the proposer, mitigated by treating transcripts as data and by the approval gate.
 
-### 17.5 Other planned enhancements
+### 17.5 Planned feature: Bring Your Own Model Keys (BYOK), recommended for best performance
+
+**Not built yet.** Today the LLM, STT and TTS providers are single process-wide instances chosen by env vars (`LLM_PROVIDER`, `STT_PROVIDER`, `TTS_PROVIDER`) and use the platform's own keys; the default is the mock. Every tenant therefore gets the same model, and the platform pays for all inference.
+
+**Idea.** Let each tenant (and optionally each agent) connect **their own API keys** for the model providers they pay for, and choose the models, so agents run on the best available paid model. The portal **recommends** this setup and guides the tenant through it, because agent quality (instruction following, tool use, rule compliance, voice naturalness) depends heavily on the model.
+
+**Why it matters**
+- **Better performance:** the agentic runtime (17.1) with tool calling, goals and a judge benefits most from strong models; free or small default models are the weakest link.
+- **Cost transparency and control:** inference is billed by the provider to the tenant's own account, so the platform does not carry or resell model cost; Envoy's usage pricing can focus on platform value.
+- **Choice and compliance:** tenants pick the provider and region that fit their data policies, or an enterprise endpoint (Azure OpenAI, Bedrock, Vertex, self-hosted).
+- **Scalability:** tenant keys come with their own rate limits, so one busy tenant does not exhaust a shared platform key.
+
+#### 17.5.1 What a tenant can configure
+
+| Setting | Detail |
+|---|---|
+| **Provider connections** | Add keys for Anthropic, OpenAI, Google Gemini, Groq, Azure OpenAI, AWS Bedrock/Vertex, Mistral/other OpenAI-compatible endpoints (custom base URL), and for voice: Whisper/Deepgram (STT), ElevenLabs/OpenAI/Gemini (TTS). |
+| **Model per role** | Separate model for `chat`, `planner`, `extractor`, `judge`, `summarizer`, `proposer` (17.4), `stt`, `tts`. Strong model for chat and judge, cheaper model for extraction and summaries. |
+| **Scope** | Workspace default, with optional per-agent override. |
+| **Fallback** | An ordered fallback list (e.g. tenant's Anthropic key, then platform default) used on rate-limit or outage, with a clear setting for whether fallback to the platform's models is allowed. |
+| **Limits** | Optional monthly spend or token cap per key, and a per-conversation budget, enforced by the harness. |
+| **Parameters** | Temperature, max tokens, reasoning/thinking effort, where the provider supports them. |
+| **Health** | "Test connection" button, key status (valid, rate-limited, quota exhausted, revoked), last-used time. |
+
+#### 17.5.2 Recommendation experience (the "should be recommended" requirement)
+
+- During onboarding and on the agent page, a **"Recommended: connect your own model key"** card explains the benefit in plain language and shows a **model-quality indicator** for the current setup (e.g. "Platform default model: basic. Your own key unlocks tool use and higher accuracy").
+- **Recommended presets** per use case, e.g. *Best quality*, *Balanced*, *Lowest cost*, *Voice-first*, each mapping roles to concrete models.
+- The agent **simulator and scenario suite (17.1.7)** can show a side-by-side comparison of the same scenarios on the default versus the tenant's chosen model (completion rate, rule violations, cost), so the recommendation is backed by evidence.
+- **Capability gating with guidance:** features that need strong tool calling or long context (some tools, multi-step loops, the improvement harness) warn when the selected model is too weak and suggest an upgrade instead of failing silently.
+- The platform's default model remains available so a tenant can start with zero setup (and the mock still exists for demos and tests).
+
+#### 17.5.3 Architecture
+
+- **From singleton to per-request resolution.** Replace the single `LLM_PROVIDER` injection with a `ModelRouter` that resolves, for each call, `(tenant, agent, role)` to a provider instance plus model and credentials. The existing `LlmProvider`, `SttProvider` and `TtsProvider` interfaces stay as they are; new adapters implement them (Anthropic, OpenAI, OpenAI-compatible).
+- **Capability registry:** each model declares what it supports (tool calling, JSON mode, streaming, context window, vision, audio) so the harness picks a compatible loop and warns when a feature is unsupported.
+- **Secret handling:** keys are encrypted at rest with the same AES-256-GCM scheme already used for CRM tokens (`token-crypto.ts`), with a key-versioning field to allow rotation. Keys are **write-only in the UI** (only the last 4 characters shown), never returned by any API, never logged, never sent to the browser, never placed in prompts, traces or the MCP server (17.2) output. Decrypted in memory only for the duration of a call.
+- **Validation:** keys are verified with a cheap provider call when saved; custom base URLs go through the existing `safe-fetch` SSRF protection so a tenant cannot point the platform at internal addresses.
+- **Resilience:** per-key circuit breaker, retry with backoff, and fallback chain; provider errors are translated into clear tenant-facing messages ("your key is out of quota").
+- **Metering:** token usage and estimated cost are recorded per call and per key whether the tenant's key or the platform's key was used. Platform-key usage feeds billing (`PriceConfig`); BYOK usage is shown for the tenant's information and spend caps, not billed by Envoy.
+- **Enforcement points:** the conversation engine, field extractor, rule judge, summary pipeline, voice pipeline, improvement harness and simulator all obtain their provider through the router, so BYOK applies uniformly.
+
+#### 17.5.4 Proposed data model additions
+
+`ModelCredential` (tenantId, provider, label, encrypted key, key version, base URL?, status, last4, lastUsedAt, spendCap, createdBy), `ModelProfile` (tenantId, optional agentId, role to credential and model mapping, parameters, fallback order), `ModelUsage` (tenantId, agentId, conversationId, role, provider, model, tokens in/out, estimated cost, latency, keySource `tenant`|`platform`), and an audit entry for every credential create, rotate and delete.
+
+#### 17.5.5 Security and privacy considerations
+
+- Key theft risk is the main concern: encryption at rest, write-only UI, role restriction (only `owner` can add or view status), audit on every change, rotation support, and one-click revoke.
+- Do not let platform admins read tenant keys; the operator console shows only status and last4.
+- Tenant data is sent to the provider the tenant chose; the tenant is told this clearly, and data-processing notes are shown per provider.
+- Leaked-key blast radius is limited by spend caps and per-key rate limits.
+- Prompt and trace storage must exclude secrets.
+
+#### 17.5.6 Suggested phases
+
+1. **Single-provider BYOK:** `ModelCredential` and encrypted storage, `ModelRouter` with workspace-level default, support for the providers already in the code (Groq, Gemini) plus one new adapter (Anthropic or OpenAI), "test connection", and usage logging.
+2. **Roles and recommendations:** per-role model mapping, presets, the recommendation cards, capability registry with warnings.
+3. **Per-agent overrides and resilience:** agent-level profiles, fallback chains, circuit breaker, spend caps.
+4. **Voice and custom endpoints:** STT/TTS BYOK, OpenAI-compatible and enterprise endpoints, evidence-based model comparison in the simulator.
+
+#### 17.5.7 Suggested functional requirements (for the SRS)
+
+- **FR-BYOK-1** A tenant owner can add, test, rotate and delete model-provider API keys for LLM, STT and TTS.
+- **FR-BYOK-2** Keys are encrypted at rest, write-only in the UI, and never exposed through any API, log, trace, prompt or MCP output.
+- **FR-BYOK-3** A tenant can choose the model per role at workspace level and override it per agent.
+- **FR-BYOK-4** The system resolves the provider and credentials per call for every AI function (chat, extraction, judge, summary, voice, harness).
+- **FR-BYOK-5** The tenant can define a fallback order and whether fallback to the platform's models is permitted.
+- **FR-BYOK-6** The portal recommends connecting an own key and recommended model presets, and shows capability warnings for unsuitable models.
+- **FR-BYOK-7** Tenant can set spend or token caps; the harness enforces them and surfaces provider errors clearly.
+- **FR-BYOK-8** Usage and estimated cost are recorded per call with the key source; only platform-key usage is billed by Envoy.
+- **FR-BYOK-9** Custom provider base URLs are validated and fetched through SSRF protection.
+- **FR-BYOK-10** All credential changes are audited; platform admins cannot view key values.
+
+#### 17.5.8 Risks and mitigations
+
+| Risk | Mitigation |
+|---|---|
+| Stored key leaks | AES-256-GCM, key versioning, write-only UI, owner-only access, no key in logs/traces, spend caps, revoke. |
+| Weak or incompatible model degrades behaviour | Capability registry, warnings, presets, simulator comparison, safe fallback. |
+| Provider outage or quota exhaustion mid-conversation | Circuit breaker, fallback chain, clear visitor-facing fallback message. |
+| Inconsistent behaviour across providers | Provider adapters behind one interface, scenario regression suite per model profile, mock for tests. |
+| Cost surprises for the tenant | Spend caps, per-call usage display, per-conversation budgets. |
+| SSRF via custom base URL | Reuse `safe-fetch`, block private ranges. |
+
+#### 17.5.9 How to evaluate this for the FYP report
+
+Run the same scripted-visitor scenarios on the platform default model and on one or more tenant-supplied stronger models, and compare goal completion, field accuracy, rule violations reaching the visitor (target zero), tool-call success, latency and cost per conversation. This gives measured evidence for the "recommended" guidance. Also test that keys never appear in any API response, log, trace or MCP output, and that a revoked or exhausted key degrades gracefully to the configured fallback.
+
+### 17.6 Other planned enhancements
 
 - **Mobile app (Expo):** tenant owners get push notifications for new leads and can read conversations on the go.
 - **Real-time voice:** streaming/chunked audio, hold-to-talk, Web Speech fallback, and recording voice conversations with `channel = "voice"`.
@@ -829,7 +919,7 @@ Measure the harness by running a fixed set of simulated visitors (scripted perso
 
 | Document | Pull from sections |
 |---|---|
-| **Project proposal** | 1, 2, 3, 4, 5, 17.1 to 17.5 |
+| **Project proposal** | 1, 2, 3, 4, 5, 17.1 to 17.6 |
 | **SRS** | 6, 8, 9, 11, 12 |
 | **SDD / architecture** | 7, 10, 11, 12, 13 |
 | **Final report** | all; chapters: Introduction (1–5), Design (7, 10), Implementation (8, 11–13), Testing (14), Challenges (16), Conclusion (17) |
