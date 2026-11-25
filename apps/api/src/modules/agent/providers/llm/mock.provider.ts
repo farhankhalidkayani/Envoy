@@ -167,7 +167,7 @@ export class MockLlmProvider implements LlmProvider {
     if (missing.length > 0) {
       const first = messages.every((m) => m.role !== "assistant" || !m.content);
       const greeting = first ? "Hi! I'd be happy to help. " : "";
-      return { text: `${greeting}Could you share your ${missing[0]!.label.toLowerCase()}?`, toolCalls: [] };
+      return { text: `${greeting}${this.ask(missing[0]!)}`, toolCalls: [] };
     }
     const open = goals.filter((g) => !["achieved", "failed"].includes(progress[g.id]?.status ?? "pending"));
     if (offered.has("update_goal") && open.length > 0) {
@@ -220,6 +220,16 @@ export class MockLlmProvider implements LlmProvider {
     });
   }
 
+  /**
+   * The mock's whole conversational range: ask for a field. If the agent has been told to explain why (a field hint
+   * such as the improvement harness drafts), it adds the reason — the one behaviour change a prompt edit can make in
+   * this scripted world, so the improvement loop has something real to improve when run against the mock.
+   */
+  private ask(field: RequiredFieldDef): string {
+    const reason = field.prompt && /explain why/i.test(field.prompt) ? " I only need this so we can confirm your booking." : "";
+    return `Could you share your ${field.label.toLowerCase()}?${reason}`;
+  }
+
   // ── chat: a scripted field-collection FSM ─────────────────────
 
   private chat(req: LlmCompleteRequest): string {
@@ -245,7 +255,7 @@ export class MockLlmProvider implements LlmProvider {
     if (askedCount < fields.length) {
       const field: RequiredFieldDef = fields[askedCount]!;
       const greeting = askedCount === 0 ? "Hi! I'd be happy to help. " : "";
-      return `${greeting}Could you share your ${field.label.toLowerCase()}?`;
+      return `${greeting}${this.ask(field)}`;
     }
 
     return `Thanks, I have everything I need! ${COMPLETE_MARKER_PREFIX} outcomeType="demo_booking"${COMPLETE_MARKER_SUFFIX}`;

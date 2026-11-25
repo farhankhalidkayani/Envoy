@@ -137,8 +137,10 @@ export class SimulationService {
     modelContext?: ModelContext;
     /** Variant model overrides, layered over the agent's own. */
     models?: Partial<ModelConfig>;
+    /** Skip the daily message limit. Internal only (the experiment runner, which sets its own budget); never exposed over HTTP. */
+    unmetered?: boolean;
   }): Promise<SimTurn> {
-    await this.meter(params.tenantId);
+    if (!params.unmetered) await this.meter(params.tenantId);
     const conversationId = this.conversationId(params.tenantId, params.sessionId);
     if (!(await this.sessions.get(conversationId))) await this.sessions.init(conversationId);
 

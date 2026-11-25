@@ -134,6 +134,48 @@ describe("MCP server against the real API (e2e)", () => {
     expect((await prisma.agent.findUniqueOrThrow({ where: { id: agent.id } })).status).toBe("draft");
   }, 150000);
 
+  it("asks the owner to publish and to change hard rules, and acts only after they approve in the portal", async () => {
+    const t = await register("ask");
+    const { data, call } = await agentClient((await mintToken(t.jwt, [...FULL, "approvals:read", "approvals:write"])).token);
+    const agent = await data<{ id: string }>("create_agent", { name: "Booker", script: "Help visitors book." });
+    const owner = (path: string, method = "GET") => fetch(`${baseUrl}${path}`, { method, headers: { Authorization: `Bearer ${t.jwt}` } }).then((r) => r.json());
+
+    const publish = await data<{ id: string; status: string; nextStep: string }>("request_publish_agent", { agentId: agent.id, reason: "Tested it — ready." });
+    expect(publish).toMatchObject({ status: "pending" });
+    expect(publish.nextStep).toMatch(/Nothing has changed yet/);
+    const rules = await data<{ id: string }>("request_hard_rules_change", { agentId: agent.id, hardRules: [{ id: "no-refunds", text: "Never promise refunds" }] });
+
+    // Nothing has happened, and the assistant can't make it happen.
+    expect((await data<{ status: string }>("get_agent", { agentId: agent.id })).status).toBe("draft");
+    expect(await data<{ status: string }>("get_approval_request", { approvalId: publish.id })).toMatchObject({ status: "pending" });
+    expect((await data<unknown[]>("list_approval_requests", { status: "pending" })).length).toBe(2);
+    expect(await prisma.agent.findUniqueOrThrow({ where: { id: agent.id } })).toMatchObject({ status: "draft", hardRules: [] });
+
+    // The owner reviews what the system says it will do — not what the assistant claims — and approves one.
+    const view = (await owner(`/approvals/${rules.id}`)) as { summary: { lines: string[] }; reason: string | null };
+    expect(view.summary.lines).toContain("ADD: “Never promise refunds” (block, high)");
+    expect((await fetch(`${baseUrl}/approvals/${publish.id}/approve`, { method: "POST", headers: { Authorization: `Bearer ${t.jwt}` } })).status).toBe(201);
+
+    expect(await data<{ status: string; result: { status: string } }>("get_approval_request", { approvalId: publish.id })).toMatchObject({ status: "approved", result: { status: "live" } });
+    expect((await data<{ status: string }>("get_agent", { agentId: agent.id })).status).toBe("live");
+    expect(await data<{ status: string }>("get_approval_request", { approvalId: rules.id })).toMatchObject({ status: "pending" }); // the other is still waiting
+    expect(await prisma.agent.findUniqueOrThrow({ where: { id: agent.id } })).toMatchObject({ hardRules: [] });
+  }, 200000);
+
+  it("cannot approve its own request, however it tries", async () => {
+    const t = await register("selfapprove");
+    const token = (await mintToken(t.jwt, [...FULL, "approvals:read", "approvals:write"])).token;
+    const { data } = await agentClient(token);
+    const agent = await data<{ id: string }>("create_agent", { name: "Bot" });
+    const req = await data<{ id: string }>("request_publish_agent", { agentId: agent.id });
+    const api = new EnvoyApi({ baseUrl, token });
+    await expect(api.post(`/approvals/${req.id}/approve`, {})).rejects.toMatchObject({ status: 403 });
+    await expect(api.post(`/approvals/${req.id}/reject`, {})).rejects.toMatchObject({ status: 403 });
+    await expect(api.patch(`/agents/${agent.id}`, { status: "live" })).rejects.toMatchObject({ status: 403 });
+    expect((await prisma.agent.findUniqueOrThrow({ where: { id: agent.id } })).status).toBe("draft");
+    expect((await prisma.approvalRequest.findUniqueOrThrow({ where: { id: req.id } })).status).toBe("pending");
+  }, 150000);
+
   it("a token's scopes decide which tools work", async () => {
     const t = await register("scopes");
     const reader = await agentClient((await mintToken(t.jwt, ["agents:read"])).token);

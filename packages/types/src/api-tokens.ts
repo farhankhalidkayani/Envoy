@@ -17,6 +17,8 @@ export const API_TOKEN_SCOPES = [
   "models:read",
   "billing:read",
   "integrations:read",
+  "approvals:read",
+  "approvals:write",
 ] as const;
 export const ApiTokenScope = z.enum(API_TOKEN_SCOPES);
 export type ApiTokenScope = z.infer<typeof ApiTokenScope>;
@@ -30,10 +32,12 @@ export const API_TOKEN_SCOPE_LABELS: Record<ApiTokenScope, string> = {
   "models:read": "See which AI models serve the workspace, and usage",
   "billing:read": "See subscription and usage",
   "integrations:read": "See which CRM and integrations are connected",
+  "approvals:read": "See the status of requests for a person's approval",
+  "approvals:write": "Ask a person to approve something (publish an agent, change hard rules…) — it still needs their yes",
 };
 
 /** Route area → the scope family a request needs. Anything not listed is closed to tokens. */
-const AREA_OF_FIRST_SEGMENT: Record<string, "agents" | "conversations" | "forms" | "models" | "billing" | "integrations"> = {
+const AREA_OF_FIRST_SEGMENT: Record<string, "agents" | "conversations" | "forms" | "models" | "billing" | "integrations" | "approvals"> = {
   agents: "agents",
   conversations: "conversations",
   leads: "conversations",
@@ -42,14 +46,17 @@ const AREA_OF_FIRST_SEGMENT: Record<string, "agents" | "conversations" | "forms"
   billing: "billing",
   crm: "integrations",
   integrations: "integrations",
+  approvals: "approvals",
 };
 
 /**
  * Actions a person must take, even where the area is otherwise open:
+ *  - deciding an approval request (a token may ask; only a person may answer),
  *  - approving or rejecting an AI-drafted change to a live agent,
  *  - restoring an old version (a snapshot can carry different hard rules).
  */
 const NEEDS_A_PERSON: Array<{ method: string; pattern: RegExp; reason: string }> = [
+  { method: "POST", pattern: /^\/approvals\/[^/]+\/(approve|reject)$/, reason: "Only a person can decide an approval request — in the portal." },
   { method: "POST", pattern: /^\/agents\/[^/]+\/improvement\/proposals\/[^/]+\/(approve|reject)$/, reason: "Approving or rejecting an improvement is a decision for a person — do it in the portal." },
   { method: "POST", pattern: /^\/agents\/[^/]+\/versions\/[^/]+\/restore$/, reason: "Restoring a version can change hard rules — do it in the portal." },
 ];

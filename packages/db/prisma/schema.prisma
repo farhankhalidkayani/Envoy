@@ -89,6 +89,10 @@ model Tenant {
   insights         Insight[]
   proposals        Proposal[]
   apiTokens        ApiToken[]
+  workflows        Workflow[]
+  workflowRuns     WorkflowRun[]
+  optOuts          OptOut[]
+  approvals        ApprovalRequest[]
 
   @@map("tenants")
 }
@@ -625,6 +629,7 @@ model ApiToken {
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   name       String
   tokenHash  String    @unique
+  approvals  ApprovalRequest[]
   /// For recognising a token in a list — the secret's last four characters.
   last4      String
   /// e.g. ["agents:read", "agents:write"] — see API_TOKEN_SCOPES in @envoy/types.
@@ -637,4 +642,163 @@ model ApiToken {
   @@index([tenantId])
   @@index([userId])
   @@map("api_tokens")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Follow-up workflows — emails and SMS sent to leads over time
+// ─────────────────────────────────────────────────────────────
+
+enum WorkflowStatus {
+  draft
+  live
+  paused
+}
+
+/// A definition (WorkflowDef in @envoy/types): trigger, conditions, steps, settings.
+model Workflow {
+  id         String         @id @default(cuid())
+  tenantId   String
+  tenant     Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name       String
+  status     WorkflowStatus @default(draft)
+  trigger    Json
+  conditions Json           @default("{}")
+  steps      Json
+  settings   Json           @default("{}")
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  runs       WorkflowRun[]
+
+  @@index([tenantId, status])
+  @@map("workflows")
+}
+
+enum WorkflowRunStatus {
+  running
+  completed
+  stopped
+  failed
+}
+
+/// One lead going through one workflow. Unique per (workflow, source), so a lead can never be enrolled twice.
+model WorkflowRun {
+  id         String            @id @default(cuid())
+  tenantId   String
+  tenant     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  workflowId String
+  workflow   Workflow          @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  /// "conversation" or "form_submission"
+  sourceType String
+  sourceId   String
+  status     WorkflowRunStatus @default(running)
+  /// Why it ended early: replied, cancelled, workflow_paused, workflow_deleted…
+  stopReason String?
+  /// The next step to run.
+  nextStep   Int               @default(0)
+  nextRunAt  DateTime?
+  createdAt  DateTime          @default(now())
+  finishedAt DateTime?
+  logs       WorkflowStepLog[]
+
+  @@unique([workflowId, sourceType, sourceId])
+  @@index([tenantId, createdAt])
+  @@index([sourceType, sourceId])
+  @@map("workflow_runs")
+}
+
+enum StepLogStatus {
+  sent
+  skipped
+  failed
+  waiting
+}
+
+/// What happened at each step, so a lead's whole follow-up is auditable.
+model WorkflowStepLog {
+  id         String        @id @default(cuid())
+  runId      String
+  run        WorkflowRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
+  tenantId   String
+  stepIndex  Int
+  type       String
+  status     StepLogStatus
+  /// Human-readable reason when skipped or failed ("Lead opted out of SMS"), or what a wait is until.
+  detail     String?
+  channel    String?
+  /// The recipient with the middle masked (a***@x.com, +44…0123) — enough to recognise, not to harvest.
+  toMasked   String?
+  /// SHA-256 of "channel:address" — lets an inbound reply or STOP be matched to exactly this contact without storing it in the clear.
+  toHash     String?
+  providerId String?
+  createdAt  DateTime      @default(now())
+
+  @@unique([runId, stepIndex])
+  @@index([tenantId, createdAt])
+  @@index([toHash])
+  @@map("workflow_step_logs")
+}
+
+/// Addresses that must not be contacted again on a channel, however many workflows would otherwise reach them.
+model OptOut {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// "email" or "sms"
+  channel   String
+  /// Normalised: lower-cased email, or E.164 phone.
+  address   String
+  /// unsubscribed (email link), stop (SMS keyword), manual
+  reason    String
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, channel, address])
+  @@map("opt_outs")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Approval requests — how an API token asks a person for the things only a person may do
+// ─────────────────────────────────────────────────────────────
+
+enum ApprovalStatus {
+  pending
+  approved
+  rejected
+  /// Nobody answered within the window.
+  expired
+  /// The agent changed after the request, so what was reviewed is no longer what would happen.
+  stale
+  /// Approved, but carrying it out failed (nothing was changed).
+  failed
+}
+
+model ApprovalRequest {
+  id           String         @id @default(cuid())
+  tenantId     String
+  tenant       Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// The token that asked; null when a person raised it themselves.
+  tokenId      String?
+  token        ApiToken?      @relation(fields: [tokenId], references: [id], onDelete: SetNull)
+  /// Display name of the token at the time, kept for the record.
+  requestedBy  String
+  agentId      String
+  /// ApprovalParams (kind + exactly what to do).
+  params       Json
+  /// Canonical form of `params`, re-checked when the request is carried out.
+  paramsHash   String
+  /// The agent's version when asked. Approval is refused if the agent has moved on.
+  baseVersion  Int
+  /// The requester's own words. Shown to the reviewer as an unverified quote.
+  reason       String?
+  status       ApprovalStatus @default(pending)
+  /// Why a request ended without being carried out (expired, stale, failed).
+  note         String?
+  decidedBy    String?
+  decidedAt    DateTime?
+  result       Json?
+  expiresAt    DateTime
+  createdAt    DateTime       @default(now())
+
+  @@index([tenantId, status])
+  @@index([agentId])
+  @@map("approval_requests")
 }

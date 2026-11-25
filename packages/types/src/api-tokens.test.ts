@@ -43,6 +43,16 @@ describe("decideTokenAccess", () => {
     expect(denied("DELETE", "/integrations/calendar")).toContain("can't make changes to integrations");
   });
 
+  it("lets a token ask for approval and see the answer, but never give it", () => {
+    expect(allow("POST", "/approvals")).toEqual({ allowed: true, scope: "approvals:write" });
+    expect(allow("GET", "/approvals")).toEqual({ allowed: true, scope: "approvals:read" });
+    expect(allow("GET", "/approvals/a1")).toEqual({ allowed: true, scope: "approvals:read" });
+    expect(denied("POST", "/approvals/a1/approve")).toContain("person");
+    expect(denied("POST", "/approvals/a1/reject")).toContain("person");
+    expect(denied("POST", "/approvals/a1/approve/")).toContain("person");
+    expect(denied("POST", "/approvals", ["approvals:read"])).toContain('"approvals:write"');
+  });
+
   it("keeps the actions that need a person out of reach even with full scopes", () => {
     expect(denied("POST", "/agents/a1/improvement/proposals/p1/approve")).toContain("decision for a person");
     expect(denied("POST", "/agents/a1/improvement/proposals/p1/reject")).toContain("decision for a person");

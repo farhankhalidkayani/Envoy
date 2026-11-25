@@ -17,6 +17,8 @@ export interface ProposeInput {
   insight: { kind: string; title: string; detail: string; facts: Record<string, string | number> };
   /** Plain-text transcripts of real conversations showing the problem. */
   samples: string[];
+  /** Don't record this call's usage against a workspace (set by the experiment runner). */
+  unrecorded?: boolean;
 }
 
 const INSTRUCTIONS = [
@@ -74,7 +76,7 @@ export class ProposerService {
     ].join("\n");
 
     // The tenant's own model, if they connected one — a proposal is only as good as the model drafting it.
-    return runWithModelContext({ tenantId: input.tenantId, agentModels: input.config.spec.models }, async () => {
+    return runWithModelContext({ tenantId: input.tenantId, agentModels: input.config.spec.models, unrecorded: input.unrecorded }, async () => {
       for (let attempt = 0; attempt < 2; attempt++) {
         let raw: string;
         try {

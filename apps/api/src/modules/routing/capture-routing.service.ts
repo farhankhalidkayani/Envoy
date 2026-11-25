@@ -4,6 +4,7 @@ import { CrmService } from "../crm/crm.service.js";
 import { IntegrationsQueueService } from "../integrations/integrations-queue.service.js";
 import { IntegrationsService } from "../integrations/integrations.service.js";
 import type { PushSource } from "../integrations/types.js";
+import { WorkflowsService } from "../workflows/workflows.service.js";
 
 /**
  * Fans captured data out to every destination the tenant has connected —
@@ -21,6 +22,7 @@ export class CaptureRoutingService {
     private readonly crmQueue: CrmQueueService,
     private readonly integrations: IntegrationsService,
     private readonly integrationsQueue: IntegrationsQueueService,
+    private readonly workflows: WorkflowsService,
   ) {}
 
   async route(tenantId: string, source: PushSource): Promise<void> {
@@ -30,5 +32,7 @@ export class CaptureRoutingService {
     for (const integration of await this.integrations.getConnections(tenantId)) {
       await this.integrationsQueue.enqueuePush({ integrationId: integration.id, ...source });
     }
+    // Follow-up workflows: enrol the lead in any live workflow it qualifies for (never throws).
+    await this.workflows.enroll(tenantId, source);
   }
 }

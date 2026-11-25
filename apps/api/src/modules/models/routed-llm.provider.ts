@@ -65,7 +65,7 @@ export class RoutedLlmProvider implements LlmProvider {
     try {
       const result = await call(this.factory.create(target.provider, target.apiKey, target.model, target.baseUrl));
       this.finish(ctx, role, target, started, true, result.usage);
-      void this.resolver.touch(ctx, target.credentialId);
+      if (!ctx.unrecorded) void this.resolver.touch(ctx, target.credentialId);
       return result;
     } catch (err) {
       this.finish(ctx, role, target, started, false);
@@ -91,12 +91,16 @@ export class RoutedLlmProvider implements LlmProvider {
     try {
       const result = await call(this.platform);
       this.total(ctx, result.usage);
-      this.usage.record({ tenantId: ctx.tenantId, role, provider: this.platform.name, model, keySource: "platform", usage: result.usage, latencyMs: Date.now() - started, ok: true });
+      this.record(ctx, { tenantId: ctx.tenantId, role, provider: this.platform.name, model, keySource: "platform", usage: result.usage, latencyMs: Date.now() - started, ok: true });
       return result;
     } catch (err) {
-      this.usage.record({ tenantId: ctx.tenantId, role, provider: this.platform.name, model, keySource: "platform", latencyMs: Date.now() - started, ok: false });
+      this.record(ctx, { tenantId: ctx.tenantId, role, provider: this.platform.name, model, keySource: "platform", latencyMs: Date.now() - started, ok: false });
       throw err;
     }
+  }
+
+  private record(ctx: ModelContext, entry: Parameters<ModelUsageRecorder["record"]>[0]) {
+    if (!ctx.unrecorded) this.usage.record(entry);
   }
 
   private total(ctx: ModelContext, usage?: LlmUsage) {
@@ -109,7 +113,7 @@ export class RoutedLlmProvider implements LlmProvider {
   private finish(ctx: ModelContext, role: ModelRole, t: TenantTarget, started: number, ok: boolean, usage?: LlmUsage) {
     ctx.lastRoute = { provider: t.provider, model: t.model, keySource: "tenant" };
     this.total(ctx, usage);
-    this.usage.record({
+    this.record(ctx, {
       tenantId: ctx.tenantId,
       credentialId: t.credentialId,
       role,

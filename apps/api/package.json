@@ -9,7 +9,8 @@
     "start": "node --env-file=.env dist/main.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "seed": "tsx --env-file=.env scripts/seed.ts"
+    "seed": "tsx --env-file=.env scripts/seed.ts",
+    "experiment": "vitest run --config vitest.experiment.config.ts"
   },
   "dependencies": {
     "@envoy/db": "workspace:*",

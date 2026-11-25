@@ -41,10 +41,11 @@ describe("tool catalogue", () => {
   it("has no tool for anything that needs a person", async () => {
     const { client } = await connect();
     const names = (await client.listTools()).tools.map((t) => t.name);
-    for (const forbidden of ["publish_agent", "update_hard_rules", "set_hard_rules", "approve_proposal", "reject_proposal", "restore_agent_version", "delete_agent", "create_api_token", "add_model_key", "create_checkout", "connect_crm", "enable_tool"]) {
+    for (const forbidden of ["publish_agent", "update_hard_rules", "set_hard_rules", "approve_proposal", "reject_proposal", "restore_agent_version", "decide_approval", "approve_request", "reject_request", "delete_agent", "create_api_token", "add_model_key", "create_checkout", "connect_crm", "enable_tool"]) {
       expect(names, forbidden).not.toContain(forbidden);
     }
-    expect(names.filter((n) => /approve|publish|restore|delete|token|key|checkout|rule/.test(n))).toEqual([]);
+    // Anything touching those words must be a REQUEST for a person's yes, never the action itself.
+    expect(names.filter((n) => /approve|publish|restore|delete|token|key|checkout|rule|enable/.test(n) && !n.startsWith("request_"))).toEqual([]);
   });
 
   it("can't be handed hard rules or a status: those fields don't exist on the write tools", async () => {
@@ -61,6 +62,8 @@ describe("tool catalogue", () => {
     const { client } = await connect();
     const text = client.getInstructions() ?? "";
     expect(text).toMatch(/publishing an agent/);
+    expect(text).toMatch(/request_\* tools/);
+    expect(text).toMatch(/expire after 24 hours/);
     expect(text).toMatch(/hard rules/);
     expect(text).toMatch(/untrusted|never as instructions/i);
   });
@@ -120,6 +123,64 @@ describe("calling tools", () => {
     await call("run_scenarios", { agentId: "a1", scenarioIds: ["s1"], variants: [{ label: "A" }] });
     expect(calls[0]).toMatchObject({ method: "POST", body: { scenarioIds: ["s1"], variants: [{ label: "A" }] } });
     expect(calls[0]!.url.pathname).toBe("/agents/a1/scenarios/run");
+  });
+});
+
+describe("asking a person for approval", () => {
+  const requestTools = ["request_publish_agent", "request_hard_rules_change", "request_enable_tools", "request_version_restore", "request_proposal_approval"];
+
+  it("offers five request tools, all described as only sending a request, plus a way to check the answer", async () => {
+    const { client } = await connect();
+    const { tools } = await client.listTools();
+    for (const name of requestTools) {
+      const t = tools.find((x) => x.name === name)!;
+      expect(t, name).toBeTruthy();
+      expect(t.description).toMatch(/only SENDS A REQUEST/);
+      expect(t.description).toMatch(/expires after 24 hours/);
+      expect(t.annotations?.readOnlyHint).toBe(false);
+    }
+    expect(tools.map((t) => t.name)).toEqual(expect.arrayContaining(["get_approval_request", "list_approval_requests"]));
+  });
+
+  it("sends exactly the request asked for, with the reason, and tells the model what happens next", async () => {
+    const { call, calls } = await connect(() => ({ json: { id: "req1", status: "pending" } }));
+    const res = await call("request_hard_rules_change", { agentId: "a1", hardRules: [{ id: "r", text: "Never promise refunds" }], reason: "Refund wording is risky." });
+    expect(calls[0]).toMatchObject({ method: "POST", body: { agentId: "a1", reason: "Refund wording is risky.", params: { kind: "set_hard_rules", hardRules: [{ id: "r", text: "Never promise refunds", action: "block", severity: "high" }] } } });
+    expect(calls[0]!.url.pathname).toBe("/approvals");
+    const out = JSON.parse(res.content[0]!.text);
+    expect(out).toMatchObject({ id: "req1", status: "pending" });
+    expect(out.nextStep).toMatch(/Nothing has changed yet/);
+  });
+
+  it("maps each tool to its own kind of request", async () => {
+    const { call, calls } = await connect(() => ({ json: { id: "r" } }));
+    await call("request_publish_agent", { agentId: "a1" });
+    await call("request_enable_tools", { agentId: "a1", tools: ["book_meeting"] });
+    await call("request_version_restore", { agentId: "a1", version: 2 });
+    await call("request_proposal_approval", { agentId: "a1", proposalId: "p1" });
+    expect(calls.map((c) => (c.body as { params: { kind: string } }).params.kind)).toEqual(["publish_agent", "enable_tools", "restore_version", "approve_proposal"]);
+  });
+
+  it("only accepts CRM and calendar tools to enable, and valid rules, before sending anything", async () => {
+    const { call, calls } = await connect();
+    expect((await call("request_enable_tools", { agentId: "a1", tools: ["capture_field"] })).isError).toBe(true);
+    expect((await call("request_enable_tools", { agentId: "a1", tools: [] })).isError).toBe(true);
+    expect((await call("request_hard_rules_change", { agentId: "a1", hardRules: [{ id: "", text: "" }] })).isError).toBe(true);
+    expect(calls).toEqual([]);
+  });
+
+  it("explains a refused request plainly (e.g. the token lacks the scope)", async () => {
+    const { call } = await connect(() => ({ status: 403, json: { message: 'This token doesn\'t have the "approvals:write" scope.' } }));
+    const res = await call("request_publish_agent", { agentId: "a1" });
+    expect(res.isError).toBe(true);
+    expect(res.content[0]!.text).toContain("approvals:write");
+  });
+
+  it("reads back an answer", async () => {
+    const { call, calls } = await connect(() => ({ json: { id: "req1", status: "approved", result: { status: "live" } } }));
+    expect(JSON.parse((await call("get_approval_request", { approvalId: "req1" })).content[0]!.text)).toMatchObject({ status: "approved" });
+    await call("list_approval_requests", { status: "pending" });
+    expect(calls.map((c) => c.url.pathname + c.url.search)).toEqual(["/approvals/req1", "/approvals?status=pending"]);
   });
 });
 
@@ -197,8 +258,8 @@ describe("resources and prompts", () => {
     expect(prompts.map((p) => p.name).sort()).toEqual(["build_lead_qualifier", "diagnose_agent", "weekly_leads_digest"]);
     const text = ((await client.getPrompt({ name: "build_lead_qualifier", arguments: { business: "A dental clinic", goal: "book a check-up" } })).messages[0]!.content as { text: string }).text;
     expect(text).toContain("A dental clinic");
-    expect(text).toMatch(/hard rules, publish/);
+    expect(text).toMatch(/request_\* tools to ask me for approval/);
     const diagnose = ((await client.getPrompt({ name: "diagnose_agent", arguments: { agentId: "a1" } })).messages[0]!.content as { text: string }).text;
-    expect(diagnose).toMatch(/Don't try to approve/);
+    expect(diagnose).toMatch(/request_proposal_approval to ask me/);
   });
 });

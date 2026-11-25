@@ -1,5 +1,11 @@
 import type {
   AgentSpec,
+  WorkflowConditions,
+  WorkflowDef,
+  WorkflowSettings,
+  WorkflowStatus,
+  WorkflowStep,
+  WorkflowTrigger,
   InsightEvidence,
   InsightKind,
   InsightSeverity,
@@ -442,4 +448,102 @@ export interface ApiToken {
 /** Returned once, at creation: `token` is the only time the secret is ever visible. */
 export interface CreatedApiToken extends ApiToken {
   token: string;
+}
+
+export interface Workflow {
+  id: string;
+  name: string;
+  status: WorkflowStatus;
+  trigger: WorkflowTrigger;
+  conditions: WorkflowConditions;
+  steps: WorkflowStep[];
+  settings: WorkflowSettings;
+  createdAt: string;
+  updatedAt: string;
+  /** Count of runs by status, e.g. { running: 2, completed: 40 }. Only on the list response. */
+  runs?: Record<string, number>;
+}
+
+export interface WorkflowList {
+  /** Messages sent across every workflow in the last 30 days. */
+  sentLast30Days: number;
+  workflows: Workflow[];
+}
+
+export interface WorkflowStepLog {
+  id: string;
+  stepIndex: number;
+  type: string;
+  status: "sent" | "skipped" | "failed" | "waiting";
+  detail: string | null;
+  channel: "email" | "sms" | null;
+  toMasked: string | null;
+  createdAt: string;
+}
+
+export interface WorkflowRun {
+  id: string;
+  workflowId: string;
+  sourceType: "conversation" | "form_submission";
+  sourceId: string;
+  status: "running" | "completed" | "stopped" | "failed";
+  stopReason: string | null;
+  nextStep: number;
+  nextRunAt: string | null;
+  createdAt: string;
+  finishedAt: string | null;
+  logs?: WorkflowStepLog[];
+  workflow?: { id: string; name: string };
+}
+
+export interface WorkflowPreview {
+  qualifies: boolean;
+  steps: Array<{
+    index: number;
+    type: WorkflowStep["type"];
+    result: "wait" | "send" | "skip" | "end";
+    atMs: number;
+    detail?: string;
+    to?: string;
+    subject?: string;
+    body?: string;
+    missingVariables?: string[];
+  }>;
+}
+
+export interface OptOut {
+  id: string;
+  channel: "email" | "sms";
+  address: string;
+  reason: "unsubscribed" | "stop" | "manual";
+  createdAt: string;
+}
+
+export interface ApprovalSummary {
+  title: string;
+  /** Built by the server from the agent's real state — never the requester's words. */
+  lines: string[];
+  warnings: string[];
+}
+
+export interface ApprovalRequest {
+  id: string;
+  kind: "publish_agent" | "restore_version" | "approve_proposal" | "set_hard_rules" | "enable_tools";
+  kindLabel: string;
+  status: "pending" | "approved" | "rejected" | "expired" | "stale" | "failed";
+  agentId: string;
+  agentName: string;
+  requestedBy: string;
+  /** The requester's own words: shown as an unverified quote. */
+  reason: string | null;
+  baseVersion: number;
+  currentVersion: number | null;
+  /** The agent changed since this was asked, so approving would not be what was reviewed. */
+  stale: boolean;
+  note: string | null;
+  createdAt: string;
+  expiresAt: string;
+  decidedAt: string | null;
+  result: unknown;
+  summary: ApprovalSummary | null;
 }

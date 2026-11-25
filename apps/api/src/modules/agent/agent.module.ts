@@ -12,6 +12,9 @@ import { ConversationEngineService } from "./conversation/conversation-engine.se
 import { ConversationSessionStore } from "./conversation/conversation-session.store.js";
 import { ConversationsController } from "./conversation/conversations.controller.js";
 import { ConversationsService } from "./conversation/conversations.service.js";
+import { ApprovalsController } from "./approvals/approvals.controller.js";
+import { ApprovalsService } from "./approvals/approvals.service.js";
+import { ExperimentRunner } from "./experiment/runner.js";
 import { ImprovementController } from "./improvement/improvement.controller.js";
 import { ImprovementService } from "./improvement/improvement.service.js";
 import { ProposalsService } from "./improvement/proposals.service.js";
@@ -44,7 +47,7 @@ import { ToolRegistry } from "./runtime/tool-registry.js";
     CrmModule,
     IntegrationsModule,
   ],
-  controllers: [AgentsController, PublicAgentsController, ConversationsController, SimulationController, ImprovementController],
+  controllers: [AgentsController, PublicAgentsController, ConversationsController, SimulationController, ImprovementController, ApprovalsController],
   providers: [
     AgentsService,
     ConversationSessionStore,
@@ -58,6 +61,8 @@ import { ToolRegistry } from "./runtime/tool-registry.js";
     ImprovementService,
     ProposalsService,
     ProposerService,
+    ExperimentRunner,
+    ApprovalsService,
     ConversationEngineService,
     AgentGateway,
   ],

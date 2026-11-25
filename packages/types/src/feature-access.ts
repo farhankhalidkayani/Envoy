@@ -14,6 +14,7 @@ export const FEATURE_KEYS = [
   "integrations",
   "forms",
   "improvement",
+  "workflows",
 ] as const;
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
 
@@ -38,4 +39,6 @@ export const DEFAULT_FEATURE_ACCESS: FeatureAccess = {
   forms: false,
   // Off by default: analysis and test runs spend the tenant's model usage, so the operator turns it on per user.
   improvement: false,
+  // Off by default: follow-ups send real email and SMS on the workspace's behalf, so the operator enables them per user.
+  workflows: false,
 };

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
-import { BotIcon, ChatIcon, SyncIcon, CardIcon, PlugIcon, FormIcon, UsersIcon, SettingsIcon, LogoMark, LogOutIcon, CpuIcon, KeyIcon } from "../../components/icons";
+import { BotIcon, ChatIcon, SyncIcon, CardIcon, PlugIcon, FormIcon, UsersIcon, SettingsIcon, LogoMark, LogOutIcon, CpuIcon, KeyIcon, MailIcon, ShieldIcon } from "../../components/icons";
 import { ThemeToggle } from "../../components/ThemeToggle";
 import { ModelBanner } from "../../components/models/ModelBanner";
 
@@ -14,10 +14,12 @@ const NAV = [
   { href: "/dashboard/leads", label: "Leads", icon: UsersIcon },
   { href: "/dashboard/conversations", label: "Conversations", icon: ChatIcon },
   { href: "/dashboard/forms", label: "Lead forms", icon: FormIcon },
+  { href: "/dashboard/workflows", label: "Follow-ups", icon: MailIcon },
   { href: "/dashboard/crm", label: "CRM", icon: SyncIcon },
   { href: "/dashboard/integrations", label: "Integrations", icon: PlugIcon },
   { href: "/dashboard/models", label: "AI models", icon: CpuIcon },
   { href: "/dashboard/api-access", label: "API & MCP", icon: KeyIcon },
+  { href: "/dashboard/approvals", label: "Approvals", icon: ShieldIcon },
   { href: "/dashboard/billing", label: "Billing", icon: CardIcon },
   { href: "/dashboard/settings", label: "Settings", icon: SettingsIcon },
 ];
@@ -27,6 +29,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [locked, setLocked] = useState(false);
+  const [pendingApprovals, setPendingApprovals] = useState(0);
   const [resendState, setResendState] = useState<"idle" | "sending" | "sent">("idle");
   const [devToken, setDevToken] = useState<string | null>(null);
 
@@ -51,6 +54,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       .then((sub) => setLocked(sub.status === "locked"))
       .catch(() => {});
   }, [user]);
+
+  // Re-read on navigation, so the count falls as soon as the owner answers a request.
+  useEffect(() => {
+    if (!user) return;
+    api.approvals.pendingCount().then((r) => setPendingApprovals(r.pending)).catch(() => {});
+  }, [user, pathname]);
 
   if (loading || !user) return null;
 
@@ -79,6 +88,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               >
                 <Icon size={17} />
                 <span className="nav-link-label">{item.label}</span>
+                {item.href === "/dashboard/approvals" && pendingApprovals > 0 && (
+                  <span className="pill pill-warn" style={{ marginLeft: "auto" }} aria-label={`${pendingApprovals} waiting for you`}>{pendingApprovals}</span>
+                )}
               </Link>
             );
           })}

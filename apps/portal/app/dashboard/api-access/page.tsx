@@ -11,7 +11,7 @@ import { useToast } from "../../../components/Toast";
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 const PRESETS: Array<{ label: string; help: string; scopes: ApiTokenScope[] }> = [
   { label: "Read only", help: "See agents, conversations and leads.", scopes: ["agents:read", "conversations:read", "forms:read", "models:read", "billing:read", "integrations:read"] },
-  { label: "Build & test agents", help: "Read everything, plus create and edit agents, run the playground and scenarios.", scopes: ["agents:read", "agents:write", "conversations:read", "models:read"] },
+  { label: "Build & test agents", help: "Read everything, create and edit agents, run the playground and scenarios — and ask you to approve the things only you can do.", scopes: ["agents:read", "agents:write", "conversations:read", "models:read", "approvals:read", "approvals:write"] },
 ];
 
 const statusOf = (t: ApiToken) => (t.revokedAt ? "revoked" : new Date(t.expiresAt) <= new Date() ? "expired" : "active");

@@ -1,4 +1,4 @@
-import type { AgentSpec, ApiOptionsSource, ScenarioDef, ModelConfig, ModelProviderKind, FeatureAccess, FormOption, FormSchema, PriceConfig } from "@envoy/types";
+import type { AgentSpec, ApiOptionsSource, WorkflowDef, OutcomeType, ScenarioDef, ModelConfig, ModelProviderKind, FeatureAccess, FormOption, FormSchema, PriceConfig } from "@envoy/types";
 import type {
   AdminTenant,
   AdminTenantDetail,
@@ -6,6 +6,7 @@ import type {
   AgentMetrics,
   AgentVersion,
   ApiToken,
+  ApprovalRequest,
   AuditLogEntry,
   AuthResult,
   CreatedApiToken,
@@ -19,6 +20,11 @@ import type {
   Insight,
   Integration,
   Lead,
+  OptOut,
+  Workflow,
+  WorkflowList,
+  WorkflowPreview,
+  WorkflowRun,
   ModelCatalog,
   ModelCredential,
   ModelStatus,
@@ -220,6 +226,34 @@ export function createApiClient(config: ApiClientConfig) {
         history: (id: string, limit = 30) => request<ScenarioRunRecord[]>(`/agents/${id}/scenarios/runs`, { query: { limit: String(limit) } }),
         getRun: (id: string, runId: string) => request<ScenarioRunRecord>(`/agents/${id}/scenarios/runs/${runId}`),
       },
+    },
+
+    workflows: {
+      list: () => request<WorkflowList>("/workflows"),
+      get: (id: string) => request<Workflow>(`/workflows/${id}`),
+      create: (def: WorkflowDef) => request<Workflow>("/workflows", { method: "POST", body: def }),
+      update: (id: string, patch: Partial<WorkflowDef>) => request<Workflow>(`/workflows/${id}`, { method: "PATCH", body: patch }),
+      /** Going live sends messages to your leads — owner only. Pausing stops every lead currently in the workflow. */
+      setStatus: (id: string, status: "live" | "paused") => request<Workflow>(`/workflows/${id}/status`, { method: "POST", body: { status } }),
+      remove: (id: string) => request<{ deleted: true }>(`/workflows/${id}`, { method: "DELETE" }),
+      runs: (id: string, status?: string) => request<WorkflowRun[]>(`/workflows/${id}/runs`, { query: { status } }),
+      getRun: (runId: string) => request<WorkflowRun>(`/workflows/runs/${runId}`),
+      cancelRun: (runId: string) => request<{ cancelled: true }>(`/workflows/runs/${runId}/cancel`, { method: "POST" }),
+      /** Plays a workflow against a sample lead. Sends nothing and enrols nobody. */
+      preview: (workflow: WorkflowDef, lead: { data: Record<string, unknown>; outcome?: OutcomeType | null }) =>
+        request<WorkflowPreview>("/workflows/preview", { method: "POST", body: { workflow, lead } }),
+      optOuts: (channel?: "email" | "sms") => request<OptOut[]>("/workflows/opt-outs", { query: { channel } }),
+      addOptOut: (channel: "email" | "sms", address: string) => request<{ channel: string; address: string }>("/workflows/opt-outs", { method: "POST", body: { channel, address } }),
+      removeOptOut: (id: string) => request<{ removed: true }>(`/workflows/opt-outs/${id}`, { method: "DELETE" }),
+    },
+
+    approvals: {
+      list: (status?: ApprovalRequest["status"]) => request<ApprovalRequest[]>("/approvals", { query: { status } }),
+      get: (id: string) => request<ApprovalRequest>(`/approvals/${id}`),
+      pendingCount: () => request<{ pending: number }>("/approvals/pending-count"),
+      /** Owner only. Carries out exactly what was requested, once, as you. */
+      approve: (id: string) => request<{ status: "approved"; result: unknown }>(`/approvals/${id}/approve`, { method: "POST" }),
+      reject: (id: string) => request<{ status: "rejected" }>(`/approvals/${id}/reject`, { method: "POST" }),
     },
 
     tokens: {

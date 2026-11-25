@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AgentSpec, RequiredFieldsSpec, ScenarioDef, ScenarioSandbox, WidgetConfig } from "@envoy/types";
+import { AgentSpec, HardRuleDef, OPT_IN_TOOL_NAMES, RequiredFieldsSpec, ScenarioDef, ScenarioSandbox, WidgetConfig } from "@envoy/types";
 import type { EnvoyApi } from "./api.js";
 
 export type Access = "read" | "write";
@@ -270,6 +270,72 @@ export const TOOLS: ToolDef[] = [
     input: { agentId, proposalId: z.string().min(1) },
     access: "write",
     run: (api, { agentId, proposalId }) => api.post(q(`${agentId}/improvement/proposals/${proposalId}/test`), {}, { timeoutMs: 600_000 }),
+  },
+
+  // ── ask a person (these REQUEST; they never do. Only the owner, in the portal, can say yes) ──
+  ...(
+    [
+      ["request_publish_agent", "Ask to publish an agent", "Ask the user to publish an agent so visitors can talk to it.", { agentId }, ({ agentId }: { agentId: string }) => ({ agentId, params: { kind: "publish_agent" } })],
+      [
+        "request_hard_rules_change",
+        "Ask to change hard rules",
+        "Ask the user to set an agent's hard rules (the things it must never say). Pass the COMPLETE list you want it to have; the user sees exactly what is added, changed and removed.",
+        { agentId, hardRules: z.array(HardRuleDef).max(50) },
+        ({ agentId, hardRules }: { agentId: string; hardRules: unknown[] }) => ({ agentId, params: { kind: "set_hard_rules", hardRules } }),
+      ],
+      [
+        "request_enable_tools",
+        "Ask to give an agent CRM or calendar access",
+        "Ask the user to let an agent look up CRM contacts, check calendar availability or book meetings. Only the tools you name.",
+        { agentId, tools: z.array(z.enum(OPT_IN_TOOL_NAMES as unknown as [string, ...string[]])).min(1) },
+        ({ agentId, tools }: { agentId: string; tools: string[] }) => ({ agentId, params: { kind: "enable_tools", tools } }),
+      ],
+      [
+        "request_version_restore",
+        "Ask to restore an earlier version",
+        "Ask the user to roll an agent back to an earlier version (see list_agent_versions). It becomes a new version.",
+        { agentId, version: z.number().int().min(1) },
+        ({ agentId, version }: { agentId: string; version: number }) => ({ agentId, params: { kind: "restore_version", version } }),
+      ],
+      [
+        "request_proposal_approval",
+        "Ask to apply a proposed improvement",
+        "Ask the user to apply a drafted improvement that has been tested (see list_proposals, test_proposal).",
+        { agentId, proposalId: z.string().min(1), acknowledgeUntested: z.boolean().optional() },
+        ({ agentId, proposalId, acknowledgeUntested }: { agentId: string; proposalId: string; acknowledgeUntested?: boolean }) => ({ agentId, params: { kind: "approve_proposal", proposalId, acknowledgeUntested } }),
+      ],
+    ] as const
+  ).map(
+    ([name, title, what, shape, build]): ToolDef => ({
+      name,
+      title,
+      description:
+        `${what} This only SENDS A REQUEST: nothing changes until the user reviews it and approves it themselves in the portal (Approvals). It expires after 24 hours and is void if the agent changes first. ` +
+        "Include a short reason; the user sees it as your words, next to a summary the system builds from the real data.",
+      input: { ...shape, reason: z.string().max(500).optional().describe("Why you're asking, in a sentence. Shown to the user as coming from you.") } as z.ZodRawShape,
+      access: "write",
+      run: async (api, args: { reason?: string }) => {
+        const { agentId, params } = (build as (a: unknown) => { agentId: string; params: unknown })(args);
+        const request = await api.post<{ id: string }>("/approvals", { agentId, params, reason: args.reason });
+        return { ...request, nextStep: "Tell the user to open Approvals in the portal and review this request. Nothing has changed yet. Check back with get_approval_request." };
+      },
+    }),
+  ),
+  {
+    name: "get_approval_request",
+    title: "Check an approval request",
+    description: "The state of a request you made: pending, approved, rejected, expired, stale (the agent changed first) or failed, with the result once it was carried out.",
+    input: { approvalId: z.string().min(1) },
+    access: "read",
+    run: (api, { approvalId }) => api.get(`/approvals/${approvalId}`),
+  },
+  {
+    name: "list_approval_requests",
+    title: "List approval requests",
+    description: "Recent requests for the user's approval, optionally by status.",
+    input: { status: z.enum(["pending", "approved", "rejected", "expired", "stale", "failed"]).optional() },
+    access: "read",
+    run: (api, { status }) => api.get("/approvals", { status }),
   },
 
   // ── workspace facts ──
