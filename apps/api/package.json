@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "seed": "tsx --env-file=.env scripts/seed.ts",
-    "experiment": "vitest run --config vitest.experiment.config.ts"
+    "experiment": "vitest run --config vitest.experiment.config.ts",
+    "cleanup:test-data": "tsx --env-file=.env scripts/cleanup-test-data.ts"
   },
   "dependencies": {
     "@envoy/db": "workspace:*",

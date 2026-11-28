@@ -122,6 +122,7 @@ describe("admin hard-delete tenant (e2e)", () => {
   let ownerToken: string;
   let adminToken: string;
   let tenantId: string;
+  let adminEmail = "";
   let tenantName: string;
 
   beforeAll(async () => {
@@ -147,7 +148,7 @@ describe("admin hard-delete tenant (e2e)", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        email: `hd-admin-${suffix}@test.dev`,
+        email: (adminEmail = `hd-admin-${suffix}@test.dev`),
         password: "hunter22",
         bootstrapSecret: process.env.ADMIN_BOOTSTRAP_SECRET,
       }),
@@ -158,6 +159,7 @@ describe("admin hard-delete tenant (e2e)", () => {
 
   afterAll(async () => {
     await prisma.tenant.deleteMany({ where: { id: tenantId } }).catch(() => {});
+    await prisma.user.deleteMany({ where: { email: adminEmail } }); // don't leave the test admin behind
     await app.close();
   }, 15000);
 

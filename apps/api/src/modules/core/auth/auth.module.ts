@@ -10,7 +10,10 @@ import { JwtAuthGuard } from "./guards/jwt-auth.guard.js";
 import { RolesGuard } from "./guards/roles.guard.js";
 import { TenantScopeGuard } from "./guards/tenant-scope.guard.js";
 import { JwtStrategy } from "./jwt.strategy.js";
+import { OAuthController, OAuthMetadataController } from "./oauth/oauth.controller.js";
+import { OAuthService } from "./oauth/oauth.service.js";
 import { ApiTokenAuditInterceptor } from "./tokens/api-token-audit.interceptor.js";
+import { TokenInfoController } from "./tokens/token-info.controller.js";
 import { TokensController } from "./tokens/tokens.controller.js";
 import { TokensService } from "./tokens/tokens.service.js";
 
@@ -23,7 +26,7 @@ import { TokensService } from "./tokens/tokens.service.js";
     }),
     BillingModule,
   ],
-  controllers: [AuthController, TokensController],
+  controllers: [AuthController, TokensController, TokenInfoController, OAuthController, OAuthMetadataController],
   providers: [
     AuthService,
     JwtStrategy,
@@ -32,6 +35,7 @@ import { TokensService } from "./tokens/tokens.service.js";
     RolesGuard,
     FeatureGuard,
     TokensService,
+    OAuthService,
     { provide: APP_INTERCEPTOR, useClass: ApiTokenAuditInterceptor },
   ],
   exports: [AuthService, JwtAuthGuard, TenantScopeGuard, RolesGuard, FeatureGuard, JwtModule],

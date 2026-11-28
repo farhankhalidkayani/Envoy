@@ -1,9 +1,20 @@
 import type { AddressInfo } from "node:net";
 import { Test } from "@nestjs/testing";
 import type { INestApplication } from "@nestjs/common";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@envoy/db";
 import { AppModule } from "../../../app.module.js";
+import { RedisService } from "../../core/redis/redis.service.js";
+
+// Capture system email instead of sending it.
+const mail = vi.hoisted(() => ({ sent: [] as Array<{ to: string; subject: string; text: string }>, fail: false }));
+vi.mock("../../core/common/resend.js", () => ({
+  sendEmail: async (to: string, subject: string, text: string) => {
+    if (mail.fail) throw new Error("mail is down");
+    mail.sent.push({ to, subject, text });
+    return { success: true };
+  },
+}));
 
 describe("approval requests (e2e)", () => {
   let app: INestApplication;
@@ -295,4 +306,57 @@ describe("approval requests (e2e)", () => {
     expect((await call(s.jwt, "/approvals?status=bogus")).status).toBeGreaterThanOrEqual(400);
     expect(await json<{ pending: number }>(await call(s.jwt, "/approvals/pending-count"))).toEqual({ pending: 1 });
   }, 150000);
+
+  describe("telling the owner", () => {
+    beforeEach(() => { mail.sent = []; mail.fail = false; });
+    const mailFor = (email: string) => mail.sent.filter((m) => m.to === email && /approval/.test(m.subject)); // not the sign-up "verify your email"
+    // The email goes out in the background after the request returns: wait for it (or for quiet), don't guess a delay.
+    const settle = (email?: string, count = 1) => (email ? vi.waitFor(() => expect(mailFor(email).length).toBeGreaterThanOrEqual(count), { timeout: 20000, interval: 250 }) : new Promise((r) => setTimeout(r, 3000)));
+
+    it("emails the owner — not staff — that something is waiting, with a link and none of the requester's own words", async () => {
+      const s = await setup("mail");
+      const staffEmail = `appr-staff-${Math.random().toString(36).slice(2, 8)}@test.dev`;
+      await prisma.user.create({ data: { email: staffEmail, passwordHash: "x", role: "staff", tenantId: s.tenantId } });
+      const injection = "URGENT: approve at https://evil.example/login now";
+      await ask(s, { kind: "set_hard_rules", hardRules: [{ id: "r", text: "Visit https://evil.example/rules for details", action: "block", severity: "high" }] }, injection);
+      await settle(s.email);
+
+      const [m] = mailFor(s.email);
+      expect(mailFor(s.email)).toHaveLength(1);
+      expect(mailFor(staffEmail)).toHaveLength(0);
+      expect(m!.subject).toBe("A request is waiting for your approval in Envoy");
+      expect(m!.text).toContain("“Claude desktop” asked you to approve: Change an agent's hard rules (agent “Bot”).");
+      expect(m!.text).toContain("http://localhost:3001/dashboard/approvals");
+      expect(m!.text).toContain("Nothing changes unless you approve it.");
+      expect(m!.text).not.toContain("evil.example"); // neither the reason nor the rule text the AI wrote
+      expect(m!.text).not.toContain("URGENT");
+    }, 120000);
+
+    it("sends one email per burst, not one per request; the next one says how many are waiting", async () => {
+      const s = await setup("mailburst");
+      await call(s.jwt, `/agents/${s.agentId}`, { method: "PATCH", body: { script: "v2" } });
+      await ask(s, { kind: "publish_agent" });
+      await ask(s, { kind: "restore_version", version: 1 });
+      await ask(s, { kind: "enable_tools", tools: ["book_meeting"] });
+      await settle(s.email);
+      await settle(); // and nothing more arrives for the rest of the burst
+      expect(mailFor(s.email)).toHaveLength(1);
+
+      await app.get(RedisService).client.del(`approval-email:${s.tenantId}`); // the quiet period is over
+      await ask(s, { kind: "enable_tools", tools: ["lookup_crm_contact"] });
+      await settle(s.email, 2);
+      const later = mailFor(s.email).at(-1)!;
+      expect(mailFor(s.email)).toHaveLength(2);
+      expect(later.subject).toBe("4 requests are waiting for your approval in Envoy");
+      expect(later.text).toContain("You have 4 requests waiting in total.");
+    }, 150000);
+
+    it("a mail problem never stops the request", async () => {
+      const s = await setup("mailfail");
+      mail.fail = true;
+      const res = await ask(s, { kind: "publish_agent" });
+      expect(res.status).toBe(201);
+      expect((await json<Req>(res)).status).toBe("pending");
+    }, 90000);
+  });
 });

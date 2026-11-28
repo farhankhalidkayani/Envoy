@@ -1,9 +1,10 @@
 import { ExecutionContext, Injectable } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
-import { API_TOKEN_PREFIX } from "@envoy/types";
+import { API_TOKEN_PREFIX, OPERATOR_TOKEN_PREFIX } from "@envoy/types";
 import { PrismaService } from "../../prisma/prisma.service.js";
 import { RedisService } from "../../redis/redis.service.js";
 import { authenticateApiToken } from "../tokens/api-token-auth.js";
+import { authenticateOperatorToken } from "../tokens/operator-token-auth.js";
 import type { AuthenticatedRequest } from "../types.js";
 
 /**
@@ -27,6 +28,7 @@ export class JwtAuthGuard extends AuthGuard("jwt") {
     const req = context.switchToHttp().getRequest<AuthenticatedRequest & { originalUrl: string; headers: Record<string, string | undefined> }>();
     const bearer = /^Bearer\s+(\S+)$/i.exec(req.headers.authorization ?? "")?.[1];
     if (bearer?.startsWith(API_TOKEN_PREFIX)) return authenticateApiToken(this.prisma, this.redis, bearer, req);
+    if (bearer?.startsWith(OPERATOR_TOKEN_PREFIX)) return authenticateOperatorToken(this.prisma, this.redis, bearer, req);
     return (await super.canActivate(context)) as boolean;
   }
 }

@@ -63,6 +63,7 @@ enum IntegrationType {
 // ─────────────────────────────────────────────────────────────
 
 model Tenant {
+  oauthCodes         OAuthCode[]
   id                 String             @id @default(cuid())
   name               String
   industry           String?
@@ -73,15 +74,15 @@ model Tenant {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
-  users           User[]
-  agents          Agent[]
-  conversations   Conversation[]
-  crmConnections  CrmConnection[]
-  integrations    Integration[]
-  forms           Form[]
-  formSubmissions FormSubmission[]
-  subscription    Subscription?
-  auditLogs       AuditLog[]
+  users            User[]
+  agents           Agent[]
+  conversations    Conversation[]
+  crmConnections   CrmConnection[]
+  integrations     Integration[]
+  forms            Form[]
+  formSubmissions  FormSubmission[]
+  subscription     Subscription?
+  auditLogs        AuditLog[]
   modelCredentials ModelCredential[]
   modelUsage       ModelUsage[]
   scenarios        Scenario[]
@@ -98,16 +99,18 @@ model Tenant {
 }
 
 model User {
-  id              String    @id @default(cuid())
+  operatorTokens  OperatorToken[]
+  oauthCodes      OAuthCode[]
+  id              String          @id @default(cuid())
   tenantId        String?
-  tenant          Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  email           String    @unique
+  tenant          Tenant?         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  email           String          @unique
   passwordHash    String
   emailVerifiedAt DateTime?
-  role            UserRole  @default(owner)
-  featureAccess   Json      @default("{}")
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  role            UserRole        @default(owner)
+  featureAccess   Json            @default("{}")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   auditLogs          AuditLog[]
   apiTokens          ApiToken[]
@@ -622,22 +625,29 @@ model Proposal {
 /// A scoped, revocable credential that acts as the user who created it, never as more than they can do.
 /// Only the SHA-256 of the secret is stored; the secret itself is shown once, at creation.
 model ApiToken {
-  id         String    @id @default(cuid())
-  tenantId   String
-  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  userId     String
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name       String
-  tokenHash  String    @unique
-  approvals  ApprovalRequest[]
+  id                  String            @id @default(cuid())
+  tenantId            String
+  tenant              Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId              String
+  user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                String
+  tokenHash           String            @unique
+  approvals           ApprovalRequest[]
+  /// Set when this token came from an OAuth sign-in (an MCP client connecting), not from the tokens page.
+  oauthClientId       String?
+  oauthClient         OAuthClient?      @relation(fields: [oauthClientId], references: [id], onDelete: Cascade)
+  /// Hash of the current refresh token; rotated on every use. The previous one is kept to detect replay.
+  refreshHash         String?           @unique
+  previousRefreshHash String?           @unique
+  refreshExpiresAt    DateTime?
   /// For recognising a token in a list — the secret's last four characters.
-  last4      String
+  last4               String
   /// e.g. ["agents:read", "agents:write"] — see API_TOKEN_SCOPES in @envoy/types.
-  scopes     String[]
-  expiresAt  DateTime
-  revokedAt  DateTime?
-  lastUsedAt DateTime?
-  createdAt  DateTime  @default(now())
+  scopes              String[]
+  expiresAt           DateTime
+  revokedAt           DateTime?
+  lastUsedAt          DateTime?
+  createdAt           DateTime          @default(now())
 
   @@index([tenantId])
   @@index([userId])
@@ -772,33 +782,87 @@ enum ApprovalStatus {
 }
 
 model ApprovalRequest {
-  id           String         @id @default(cuid())
-  tenantId     String
-  tenant       Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id          String         @id @default(cuid())
+  tenantId    String
+  tenant      Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   /// The token that asked; null when a person raised it themselves.
-  tokenId      String?
-  token        ApiToken?      @relation(fields: [tokenId], references: [id], onDelete: SetNull)
+  tokenId     String?
+  token       ApiToken?      @relation(fields: [tokenId], references: [id], onDelete: SetNull)
   /// Display name of the token at the time, kept for the record.
-  requestedBy  String
-  agentId      String
+  requestedBy String
+  agentId     String
   /// ApprovalParams (kind + exactly what to do).
-  params       Json
+  params      Json
   /// Canonical form of `params`, re-checked when the request is carried out.
-  paramsHash   String
+  paramsHash  String
   /// The agent's version when asked. Approval is refused if the agent has moved on.
-  baseVersion  Int
+  baseVersion Int
   /// The requester's own words. Shown to the reviewer as an unverified quote.
-  reason       String?
-  status       ApprovalStatus @default(pending)
+  reason      String?
+  status      ApprovalStatus @default(pending)
   /// Why a request ended without being carried out (expired, stale, failed).
-  note         String?
-  decidedBy    String?
-  decidedAt    DateTime?
-  result       Json?
-  expiresAt    DateTime
-  createdAt    DateTime       @default(now())
+  note        String?
+  decidedBy   String?
+  decidedAt   DateTime?
+  result      Json?
+  expiresAt   DateTime
+  createdAt   DateTime       @default(now())
 
   @@index([tenantId, status])
   @@index([agentId])
   @@map("approval_requests")
+}
+
+/// An app that connected (or tried to) via OAuth dynamic client registration. Public client: no secret, PKCE instead.
+model OAuthClient {
+  id           String      @id @default(cuid())
+  name         String
+  redirectUris String[]
+  createdAt    DateTime    @default(now())
+  codes        OAuthCode[]
+  tokens       ApiToken[]
+
+  @@map("oauth_clients")
+}
+
+/// A one-time authorization code, valid for minutes, bound to the client, redirect URI, PKCE challenge and the person who consented.
+model OAuthCode {
+  id            String      @id @default(cuid())
+  codeHash      String      @unique
+  clientId      String
+  client        OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  tenantId      String
+  tenant        Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  redirectUri   String
+  codeChallenge String
+  scopes        String[]
+  resource      String?
+  expiresAt     DateTime
+  usedAt        DateTime?
+  /// The token issued when the code was exchanged, so a replayed code can revoke it.
+  tokenId       String?
+  createdAt     DateTime    @default(now())
+
+  @@map("oauth_codes")
+}
+
+/// A token for the platform operator's AI assistant (the operator MCP server). Belongs to a platform_admin; separate from workspace API tokens.
+model OperatorToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  tokenHash  String    @unique
+  last4      String
+  /// "admin:read" and/or "admin:write" — see OPERATOR_SCOPES in @envoy/types.
+  scopes     String[]
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@map("operator_tokens")
 }

@@ -11,5 +11,6 @@ export interface JwtPayload {
 export interface AuthenticatedRequest extends Request {
   user: JwtPayload;
   /** Set only when the request authenticated with an API token (never for a signed-in person's JWT). */
-  apiToken?: { id: string; name: string; scopes: string[] };
+  /** Set when a token (not a signed-in person) made the request. `operator` marks a platform operator token. */
+  apiToken?: { id: string; name: string; scopes: string[]; operator?: boolean };
 }

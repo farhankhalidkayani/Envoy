@@ -137,14 +137,14 @@ export default function ApiAccessPage() {
           return (
             <div key={t.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 0", borderTop: "1px solid var(--line)", fontSize: 13, opacity: status === "active" ? 1 : 0.6 }}>
               <span style={{ flex: 1 }}>
-                <b>{t.name}</b> <span style={{ color: "var(--ink-faint)" }}>· envoy_sk_…{t.last4}</span>
+                <b>{t.name}</b> {t.connectedApp ? <span className="pill pill-gray">connected app</span> : <span style={{ color: "var(--ink-faint)" }}>· envoy_sk_…{t.last4}</span>}
                 <span className={`pill ${status === "active" ? "pill-ok" : "pill-gray"}`} style={{ marginLeft: 8 }}>{status}</span>
                 <span style={{ display: "block", fontSize: 11.5, color: "var(--ink-faint)" }}>{t.scopes.join(", ")}</span>
                 <span style={{ display: "block", fontSize: 11.5, color: "var(--ink-faint)" }}>
-                  {t.lastUsedAt ? `Last used ${new Date(t.lastUsedAt).toLocaleString()}` : "Never used"} · expires {new Date(t.expiresAt).toLocaleDateString()}
+                  {t.lastUsedAt ? `Last used ${new Date(t.lastUsedAt).toLocaleString()}` : "Never used"} · {t.connectedApp ? "stays connected until" : "expires"} {new Date(t.expiresAt).toLocaleDateString()}
                 </span>
               </span>
-              {isOwner && status === "active" && <button type="button" className="btn" onClick={() => revoke(t)} aria-label={`Revoke ${t.name}`} style={{ fontSize: 12 }}>Revoke</button>}
+              {isOwner && status === "active" && <button type="button" className="btn" onClick={() => revoke(t)} aria-label={`${t.connectedApp ? "Disconnect" : "Revoke"} ${t.name}`} style={{ fontSize: 12 }}>{t.connectedApp ? "Disconnect" : "Revoke"}</button>}
             </div>
           );
         })}

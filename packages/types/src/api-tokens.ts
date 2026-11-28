@@ -68,6 +68,9 @@ export function decideTokenAccess(method: string, rawPath: string, granted: read
   const path = rawPath.split("?")[0]!.replace(/\/+$/, "") || "/";
   const verb = method.toUpperCase();
 
+  // Any valid token may ask about itself (the MCP server checks this before each request, to answer 401 on an expired one).
+  if (verb === "GET" && path === "/token-info" && granted.length > 0) return { allowed: true, scope: granted[0] as ApiTokenScope };
+
   const area = AREA_OF_FIRST_SEGMENT[path.split("/")[1] ?? ""];
   if (!area) return { allowed: false, reason: "This endpoint isn't available to API tokens." };
 

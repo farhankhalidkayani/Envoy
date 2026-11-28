@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { errorMessage } from "../../lib/errors";
+import { safeNext } from "../../lib/safe-next";
 
 export default function LoginPage() {
   const { setSession } = useAuth();
@@ -22,7 +23,7 @@ export default function LoginPage() {
     try {
       const result = await api.auth.login({ email, password });
       setSession(result);
-      router.push("/dashboard");
+      router.push(safeNext(window.location.search));
     } catch (err) {
       setError(errorMessage(err));
     } finally {

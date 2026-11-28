@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { ModelConfig, type ModelProviderKind, type ModelRole } from "@envoy/types";
+import { ModelConfig, supportsVoiceRole, type ModelProviderKind, type ModelRole, type VoiceRole } from "@envoy/types";
 import { PrismaService } from "../core/prisma/prisma.service.js";
 import { decryptToken } from "../crm/token-crypto.js";
 import type { ModelContext } from "./model-context.js";
@@ -11,6 +11,8 @@ export interface TenantTarget {
   model: string;
   apiKey: string;
   baseUrl: string | null;
+  /** TTS only: the voice to speak in. */
+  voice?: string;
   allowFallback: boolean;
 }
 export interface PlatformTarget {
@@ -48,9 +50,11 @@ export class ModelResolver {
   }
 
   /** The agent's override beats the workspace's; within a level a role's own choice beats `default`. */
-  async resolve(ctx: ModelContext, role: ModelRole): Promise<ModelTarget> {
+  async resolve(ctx: ModelContext, role: ModelRole | VoiceRole): Promise<ModelTarget> {
     const { config, credentials } = await this.load(ctx);
-    const choice = ctx.agentModels?.[role] ?? ctx.agentModels?.default ?? config[role] ?? config.default;
+    // Voice never falls back to `default`: that names a chat model, which can't listen or speak.
+    const voice = role === "stt" || role === "tts";
+    const choice = voice ? (ctx.agentModels?.[role] ?? config[role]) : (ctx.agentModels?.[role] ?? ctx.agentModels?.default ?? config[role] ?? config.default);
     const allowFallback = config.allowPlatformFallback;
     if (!choice) return { kind: "platform", allowFallback };
 
@@ -58,6 +62,7 @@ export class ModelResolver {
     const credential = credentials.get(choice.credentialId);
     if (!credential) return { kind: "platform", reason: "The selected API key no longer exists.", allowFallback };
     if (credential.status !== "active") return { kind: "platform", reason: "The selected API key was rejected by its provider.", allowFallback };
+    if (voice && !supportsVoiceRole(credential.provider, role)) return { kind: "platform", reason: `That provider can't do ${role === "stt" ? "speech-to-text" : "text-to-speech"}.`, allowFallback };
 
     return {
       kind: "tenant",
@@ -66,6 +71,7 @@ export class ModelResolver {
       model: choice.model,
       apiKey: decryptToken(credential.encryptedKey),
       baseUrl: credential.baseUrl,
+      voice: "voice" in choice ? (choice.voice as string | undefined) : undefined,
       allowFallback,
     };
   }

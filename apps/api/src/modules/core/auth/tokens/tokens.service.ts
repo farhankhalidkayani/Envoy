@@ -10,9 +10,11 @@ const MAX_ACTIVE_TOKENS = 20;
 export class TokensService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private view(t: { id: string; name: string; last4: string; scopes: string[]; expiresAt: Date; revokedAt: Date | null; lastUsedAt: Date | null; createdAt: Date; userId: string }) {
-    // The hash is deliberately not part of this shape — and the secret is only ever returned by create().
-    return { id: t.id, name: t.name, last4: t.last4, scopes: t.scopes, expiresAt: t.expiresAt, revokedAt: t.revokedAt, lastUsedAt: t.lastUsedAt, createdAt: t.createdAt, createdBy: t.userId };
+  private view(t: { id: string; name: string; last4: string; scopes: string[]; expiresAt: Date; revokedAt: Date | null; lastUsedAt: Date | null; createdAt: Date; userId: string; oauthClientId?: string | null; refreshExpiresAt?: Date | null }) {
+    // The hashes are deliberately not part of this shape — and the secret is only ever returned by create().
+    // An OAuth connection renews itself, so it is "active" for as long as its refresh token is, not its hourly access token.
+    const connected = Boolean(t.oauthClientId);
+    return { id: t.id, name: t.name, last4: t.last4, scopes: t.scopes, expiresAt: connected ? (t.refreshExpiresAt ?? t.expiresAt) : t.expiresAt, revokedAt: t.revokedAt, lastUsedAt: t.lastUsedAt, createdAt: t.createdAt, createdBy: t.userId, connectedApp: connected };
   }
 
   async list(tenantId: string) {

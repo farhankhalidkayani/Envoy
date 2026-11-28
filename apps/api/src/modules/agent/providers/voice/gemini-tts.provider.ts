@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { LlmHttpError } from "../llm/types.js";
 import { pcmToWav } from "./wav.js";
 import type { TtsProvider, TtsSynthesizeResult } from "./types.js";
 
@@ -24,8 +25,8 @@ export class GeminiTtsProvider implements TtsProvider {
 
   constructor(
     private readonly apiKey: string,
-    private readonly model = DEFAULT_MODEL,
-    private readonly voiceName = DEFAULT_VOICE,
+    private readonly model: string = DEFAULT_MODEL,
+    private readonly voiceName: string = DEFAULT_VOICE,
   ) {}
 
   async synthesize(text: string): Promise<TtsSynthesizeResult> {
@@ -45,7 +46,7 @@ export class GeminiTtsProvider implements TtsProvider {
       }),
     });
     if (!response.ok) {
-      throw new Error(`Gemini TTS API error ${response.status}: ${await response.text()}`);
+      throw new LlmHttpError("gemini", response.status, await response.text());
     }
     const data = (await response.json()) as {
       candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data?: string } }> } }>;

@@ -3,6 +3,7 @@ import { Test } from "@nestjs/testing";
 import type { INestApplication } from "@nestjs/common";
 import { Queue, Worker } from "bullmq";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { prisma } from "@envoy/db";
 import { AppModule } from "../../app.module.js";
 import { AgentGateway } from "../agent/gateway/agent.gateway.js";
 import { createPipelineRedisConnection } from "../pipeline/pipeline-connection.js";
@@ -24,6 +25,8 @@ describe("admin failed-jobs list + retry (e2e)", () => {
   let app: INestApplication;
   let baseUrl: string;
   let adminToken: string;
+  let adminEmail: string;
+  const createdTenants: string[] = [];
   let queue: Queue;
   let jobId: string;
 
@@ -37,11 +40,12 @@ describe("admin failed-jobs list + retry (e2e)", () => {
     baseUrl = `http://localhost:${address.port}`;
 
     const suffix = Math.random().toString(36).slice(2, 8);
+    adminEmail = `jobs-admin-${suffix}@test.dev`;
     const admin = await fetch(`${baseUrl}/auth/register-admin`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        email: `jobs-admin-${suffix}@test.dev`,
+        email: adminEmail,
         password: "hunter22",
         bootstrapSecret: process.env.ADMIN_BOOTSTRAP_SECRET,
       }),
@@ -63,6 +67,9 @@ describe("admin failed-jobs list + retry (e2e)", () => {
   }, 20000);
 
   afterAll(async () => {
+    // Leave nothing behind in the shared database.
+    await prisma.tenant.deleteMany({ where: { id: { in: createdTenants } } });
+    await prisma.user.deleteMany({ where: { email: adminEmail } });
     await queue.getJob(jobId).then((j) => j?.remove());
     await queue.close();
     await app.close();
@@ -86,7 +93,8 @@ describe("admin failed-jobs list + retry (e2e)", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tenantName: "Not Admin Co", email: `notadmin-${suffix}@test.dev`, password: "hunter22" }),
-    }).then((r) => json<{ accessToken: string }>(r));
+    }).then((r) => json<{ accessToken: string; user: { tenantId: string } }>(r));
+    createdTenants.push(reg.user.tenantId);
     const res = await fetch(`${baseUrl}/admin/jobs/failed`, { headers: { Authorization: `Bearer ${reg.accessToken}` } });
     expect(res.status).toBe(403);
   });

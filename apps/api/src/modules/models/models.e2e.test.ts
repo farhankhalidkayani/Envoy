@@ -8,6 +8,7 @@ import { AppModule } from "../../app.module.js";
 import { AgentGateway } from "../agent/gateway/agent.gateway.js";
 import { MockLlmProvider } from "../agent/providers/llm/mock.provider.js";
 import { LlmHttpError, type LlmProvider } from "../agent/providers/llm/types.js";
+import type { SttProvider, TtsProvider } from "../agent/providers/voice/types.js";
 import { ModelProviderFactory } from "./provider-factory.js";
 
 /**
@@ -30,6 +31,28 @@ class FakeFactory extends ModelProviderFactory {
       complete: async (r) => { guard(r.purpose); return { ...(await mock.complete(r)), usage: { inputTokens: 10, outputTokens: 4 } }; },
       completeWithTools: async (r) => { guard("chat"); return { ...(await mock.completeWithTools(r)), usage: { inputTokens: 20, outputTokens: 6 } }; },
       judge: async (text, rules) => { guard("judge"); return mock.judge(text, rules); },
+    };
+  }
+
+  voiceCalls: Array<{ role: "stt" | "tts"; kind: string; model: string; apiKey: string; voice?: string }> = [];
+  override createStt(kind: Parameters<ModelProviderFactory["create"]>[0], apiKey: string, model: string): SttProvider {
+    return {
+      name: kind,
+      transcribe: async (audio) => {
+        this.voiceCalls.push({ role: "stt", kind, model, apiKey });
+        if (apiKey.startsWith("bad") || this.revoked.has(apiKey)) throw new LlmHttpError(kind, 401, "invalid api key");
+        return { text: `[${kind}] ${Buffer.from(audio, "base64").toString("utf8")}` };
+      },
+    };
+  }
+  override createTts(kind: Parameters<ModelProviderFactory["create"]>[0], apiKey: string, model: string, voice?: string): TtsProvider {
+    return {
+      name: kind,
+      synthesize: async () => {
+        this.voiceCalls.push({ role: "tts", kind, model, apiKey, voice });
+        if (apiKey.startsWith("bad") || this.revoked.has(apiKey)) throw new LlmHttpError(kind, 401, "invalid api key");
+        return { audioBase64: Buffer.from(`tenant-audio:${voice}`).toString("base64"), mimeType: "audio/wav" };
+      },
     };
   }
 }
@@ -121,7 +144,7 @@ describe("bring-your-own-model keys (e2e)", () => {
     wsBase = `ws://localhost:${port}`;
   }, 30000);
 
-  beforeEach(() => { fake.calls = []; fake.revoked.clear(); });
+  beforeEach(() => { fake.calls = []; fake.voiceCalls = []; fake.revoked.clear(); });
 
   afterAll(async () => {
     await prisma.tenant.deleteMany({ where: { id: { in: tenants } } });
@@ -294,6 +317,129 @@ describe("bring-your-own-model keys (e2e)", () => {
       while (!fake.calls.some((c) => c.purpose === "summarize") && Date.now() < deadline) await new Promise((r) => setTimeout(r, 300));
       expect(fake.calls.find((c) => c.purpose === "summarize")).toMatchObject({ apiKey: "sk-good-7777", model: "summary-model" });
     }, 80000);
+  });
+
+
+  describe("voice", () => {
+    /** Speaks one utterance; returns what the visitor saw transcribed and the audio they got back. */
+    function speak(agent: { id: string; publicToken: string }, said: string): Promise<{ transcript: string; audio: string }> {
+      return new Promise((resolve, reject) => {
+        const ws = new WebSocket(`${wsBase}/ws/agent/${agent.id}`);
+        let transcript = "";
+        const timer = setTimeout(() => { ws.close(); reject(new Error("timed out")); }, 25000);
+        ws.addEventListener("open", () => ws.send(JSON.stringify({ type: "session.start", agentId: agent.id, publicToken: agent.publicToken })));
+        ws.addEventListener("message", (e) => {
+          const m = JSON.parse(e.data as string) as { type: string; text?: string; chunk?: string; message?: string };
+          if (m.type === "session.ready") ws.send(JSON.stringify({ type: "user.audio", chunk: Buffer.from(said).toString("base64"), mimeType: "audio/webm" }));
+          else if (m.type === "transcript") transcript = m.text ?? "";
+          else if (m.type === "agent.audio") { clearTimeout(timer); ws.close(); resolve({ transcript, audio: Buffer.from(m.chunk ?? "", "base64").toString("utf8") }); }
+          else if (m.type === "error") { clearTimeout(timer); ws.close(); reject(new Error(`gateway: ${m.message}`)); }
+        });
+      });
+    }
+    const usageRows = async (token: string) => {
+      await new Promise((r) => setTimeout(r, 1500));
+      return (await json<{ rows: Array<{ keySource: string; role: string; provider: string; calls: number; failures: number }> }>(await api(token, "/models/usage"))).rows;
+    };
+
+    it("uses the platform voice until the workspace sets its own, and a chat `default` never takes over voice", async () => {
+      const t = await register("voice-default");
+      const { body } = await addKey(t.token, "sk-good-v1", "openai");
+      await api(t.token, "/models/config", { method: "PUT", body: { default: { credentialId: body.id, model: "gpt-4.1" } } });
+      const { transcript } = await speak(await agentFor(t.token), "hello there");
+      expect(transcript).toBe("hello there"); // the platform (mock) voice, untouched
+      expect(fake.voiceCalls).toEqual([]);
+      expect(await json<{ voice: Record<string, { source: string }> }>(await api(t.token, "/models/status"))).toMatchObject({ voice: { stt: { source: "platform" }, tts: { source: "platform" } } });
+    }, 90000);
+
+    it("listens and speaks with the workspace's own keys, in the chosen voice, and records it as theirs", async () => {
+      const t = await register("voice-byok");
+      const groq = (await addKey(t.token, "gsk-good-v2", "groq", "Groq")).body;
+      const openai = (await addKey(t.token, "sk-good-v3", "openai", "OpenAI")).body;
+      const put = await api(t.token, "/models/config", { method: "PUT", body: { stt: { credentialId: groq.id, model: "whisper-large-v3" }, tts: { credentialId: openai.id, model: "gpt-4o-mini-tts", voice: "nova" } } });
+      expect(put.status).toBe(200);
+      expect(await json<{ voice: unknown }>(await api(t.token, "/models/status"))).toMatchObject({
+        voice: { stt: { source: "tenant", provider: "groq", model: "whisper-large-v3" }, tts: { source: "tenant", provider: "openai", model: "gpt-4o-mini-tts", voice: "nova" } },
+      });
+
+      const out = await speak(await agentFor(t.token), "book me in");
+      expect(out.transcript).toBe("[groq] book me in");
+      expect(out.audio).toBe("tenant-audio:nova");
+      expect(fake.voiceCalls).toEqual([
+        { role: "stt", kind: "groq", model: "whisper-large-v3", apiKey: "gsk-good-v2" },
+        { role: "tts", kind: "openai", model: "gpt-4o-mini-tts", apiKey: "sk-good-v3", voice: "nova" },
+      ]);
+      const rows = await usageRows(t.token);
+      expect(rows.filter((r) => r.role === "stt" || r.role === "tts").map((r) => [r.role, r.keySource, r.provider]).sort()).toEqual([["stt", "tenant", "groq"], ["tts", "tenant", "openai"]]);
+    }, 90000);
+
+    it("an agent can use its own voice over the workspace's", async () => {
+      const t = await register("voice-agent");
+      const openai = (await addKey(t.token, "sk-good-v4", "openai")).body;
+      await api(t.token, "/models/config", { method: "PUT", body: { tts: { credentialId: openai.id, model: "tts-1", voice: "alloy" } } });
+      const agent = await agentFor(t.token, { models: { tts: { credentialId: openai.id, model: "gpt-4o-mini-tts", voice: "echo" } } });
+      expect((await speak(agent, "hi")).audio).toBe("tenant-audio:echo");
+      expect(fake.voiceCalls.find((c) => c.role === "tts")).toMatchObject({ model: "gpt-4o-mini-tts", voice: "echo" });
+    }, 90000);
+
+    it("a rejected voice key falls back to the platform voice, so the visitor still hears a reply, and the key is flagged", async () => {
+      const t = await register("voice-failover");
+      const openai = (await addKey(t.token, "sk-good-v5", "openai")).body;
+      await api(t.token, "/models/config", { method: "PUT", body: { stt: { credentialId: openai.id, model: "gpt-4o-transcribe" }, tts: { credentialId: openai.id, model: "tts-1" } } });
+      fake.revoked.add("sk-good-v5");
+      const out = await speak(await agentFor(t.token), "still works");
+      expect(out.transcript).toBe("still works"); // platform STT answered
+      expect(out.audio).not.toContain("tenant-audio"); // platform TTS answered
+      expect((await prisma.modelCredential.findUniqueOrThrow({ where: { id: openai.id } })).status).toBe("invalid");
+      const rows = await usageRows(t.token);
+      expect(rows.find((r) => r.role === "stt" && r.keySource === "tenant")?.failures).toBe(1);
+      expect(rows.find((r) => r.role === "stt" && r.keySource === "platform")?.calls).toBe(1);
+    }, 90000);
+
+    it("with fallback off, a broken voice key is an error rather than a silent switch", async () => {
+      const t = await register("voice-nofallback");
+      const openai = (await addKey(t.token, "sk-good-v6", "openai")).body;
+      await api(t.token, "/models/config", { method: "PUT", body: { stt: { credentialId: openai.id, model: "gpt-4o-transcribe" }, allowPlatformFallback: false } });
+      fake.revoked.add("sk-good-v6");
+      await expect(speak(await agentFor(t.token), "hello")).rejects.toThrow();
+    }, 90000);
+
+    it("refuses a key whose provider can't do that voice job", async () => {
+      const t = await register("voice-invalid");
+      const anthropic = (await addKey(t.token, "sk-ant-good", "anthropic")).body;
+      const gemini = (await addKey(t.token, "gm-good-key", "gemini", "Gemini")).body;
+      const groq = (await addKey(t.token, "gsk-good-v7", "groq", "Groq")).body;
+      const put = (body: unknown) => api(t.token, "/models/config", { method: "PUT", body });
+      for (const [body, word] of [
+        [{ stt: { credentialId: anthropic.id, model: "x" } }, "speech-to-text: anthropic"],
+        [{ tts: { credentialId: anthropic.id, model: "x" } }, "text-to-speech: anthropic"],
+        [{ stt: { credentialId: gemini.id, model: "x" } }, "speech-to-text: gemini"],
+        [{ tts: { credentialId: groq.id, model: "x" } }, "text-to-speech: groq"],
+      ] as const) {
+        const res = await put(body);
+        expect(res.status, JSON.stringify(body)).toBe(400);
+        expect(await res.text()).toContain(word);
+      }
+      expect((await put({ stt: { credentialId: groq.id, model: "whisper-large-v3" }, tts: { credentialId: gemini.id, model: "gemini-2.5-flash-preview-tts", voice: "Kore" } })).status).toBe(200);
+    }, 90000);
+
+    it("an agent override naming a key that can't do the job is ignored, not obeyed", async () => {
+      const t = await register("voice-agentbad");
+      const anthropic = (await addKey(t.token, "sk-ant-good-2", "anthropic")).body;
+      const agent = await agentFor(t.token, { models: { stt: { credentialId: anthropic.id, model: "claude" } } });
+      expect((await speak(agent, "hello")).transcript).toBe("hello"); // platform voice (fallback on by default)
+      expect(fake.voiceCalls).toEqual([]);
+    }, 90000);
+
+    it("deleting a key removes it from the voice settings too", async () => {
+      const t = await register("voice-delete");
+      const openai = (await addKey(t.token, "sk-good-v8", "openai")).body;
+      await api(t.token, "/models/config", { method: "PUT", body: { stt: { credentialId: openai.id, model: "gpt-4o-transcribe" }, tts: { credentialId: openai.id, model: "tts-1", voice: "alloy" } } });
+      expect((await api(t.token, `/models/credentials/${openai.id}`, { method: "DELETE" })).status).toBeLessThan(300);
+      const cfg = await json<Record<string, unknown>>(await api(t.token, "/models/config"));
+      expect(cfg.stt).toBeUndefined();
+      expect(cfg.tts).toBeUndefined();
+    }, 90000);
   });
 
   describe("removing keys", () => {

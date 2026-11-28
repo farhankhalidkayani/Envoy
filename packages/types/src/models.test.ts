@@ -45,3 +45,36 @@ describe("ModelConfig", () => {
     expect(AgentSpec.parse({ models: { chat: { credentialId: "c", model: "m" } } }).models.chat?.model).toBe("m");
   });
 });
+
+describe("voice models", async () => {
+  const { ModelConfig, VOICE_PROVIDERS, VOICE_CATALOG, supportsVoiceRole } = await import("./models.js");
+  const { AgentSpec } = await import("./agent-spec.js");
+
+  it("stores speech-to-text and text-to-speech choices, with an optional voice", () => {
+    const c = ModelConfig.parse({ stt: { credentialId: "k", model: "whisper-large-v3" }, tts: { credentialId: "k", model: "tts-1", voice: "nova" } });
+    expect(c.stt).toEqual({ credentialId: "k", model: "whisper-large-v3" });
+    expect(c.tts).toEqual({ credentialId: "k", model: "tts-1", voice: "nova" });
+    expect(ModelConfig.safeParse({ tts: { credentialId: "k", model: "tts-1", voice: "" } }).success).toBe(false);
+  });
+
+  it("an agent can override voice too", () => {
+    expect(AgentSpec.parse({ models: { tts: { credentialId: "k", model: "tts-1", voice: "echo" } } }).models.tts?.voice).toBe("echo");
+  });
+
+  it("knows which providers can do which voice job — Anthropic can do neither, Groq only listens, Gemini only speaks", () => {
+    expect(supportsVoiceRole("anthropic", "stt")).toBe(false);
+    expect(supportsVoiceRole("anthropic", "tts")).toBe(false);
+    expect(supportsVoiceRole("groq", "stt")).toBe(true);
+    expect(supportsVoiceRole("groq", "tts")).toBe(false);
+    expect(supportsVoiceRole("gemini", "tts")).toBe(true);
+    expect(supportsVoiceRole("gemini", "stt")).toBe(false);
+    expect(VOICE_PROVIDERS.stt).toContain("openai_compatible");
+  });
+
+  it("only suggests models for providers that can do the job, and every TTS suggestion has a default voice", () => {
+    for (const role of ["stt", "tts"] as const) {
+      for (const provider of Object.keys(VOICE_CATALOG[role])) expect(supportsVoiceRole(provider as never, role)).toBe(true);
+    }
+    for (const models of Object.values(VOICE_CATALOG.tts)) for (const m of models!) expect(m.defaultVoice).toBeTruthy();
+  });
+});

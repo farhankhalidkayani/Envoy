@@ -1,3 +1,4 @@
+import { runWithModelContext } from "../../models/model-context.js";
 import type { IncomingMessage, Server as HttpServer } from "node:http";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { WebSocket, WebSocketServer } from "ws";
@@ -190,13 +191,15 @@ export class AgentGateway {
       return;
     }
 
-    const { text } = await this.stt.transcribe(chunk, mimeType);
+    // Speech uses the workspace's (or this agent's) own voice key when one is set.
+    const inContext = <T>(fn: () => Promise<T>) => runWithModelContext({ tenantId: state.tenantId!, agentModels: state.agentConfig!.spec?.models }, fn);
+    const { text } = await inContext(() => this.stt.transcribe(chunk, mimeType));
     this.send(ws, { type: "transcript", text });
 
     const visibleText = await this.respondToText(ws, state, text);
     if (visibleText === undefined) return;
 
-    const { audioBase64, mimeType: replyMimeType } = await this.tts.synthesize(visibleText);
+    const { audioBase64, mimeType: replyMimeType } = await inContext(() => this.tts.synthesize(visibleText));
     this.send(ws, { type: "agent.audio", chunk: audioBase64, mimeType: replyMimeType });
   }
 

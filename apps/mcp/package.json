@@ -5,7 +5,8 @@
   "type": "module",
   "description": "MCP server that lets an AI agent operate an Envoy workspace through a scoped API token.",
   "bin": {
-    "envoy-mcp": "./dist/stdio.js"
+    "envoy-mcp": "./dist/stdio.js",
+    "envoy-mcp-operator": "./dist/stdio-operator.js"
   },
   "scripts": {
     "build": "tsc",
@@ -13,7 +14,8 @@
     "start": "node dist/stdio.js",
     "start:http": "node dist/http.js",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "start:operator": "node dist/stdio-operator.js"
   },
   "dependencies": {
     "@envoy/types": "workspace:*",

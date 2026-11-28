@@ -25,7 +25,7 @@ export class ApiTokenAuditInterceptor implements NestInterceptor {
           data: {
             adminUserId: req.user.sub,
             tenantId: req.user.tenantId,
-            action: "api_token.request",
+            action: req.apiToken.operator ? "operator_token.request" : "api_token.request",
             meta: { tokenId: req.apiToken.id, token: req.apiToken.name, method: req.method, path: req.originalUrl.split("?")[0], status },
           },
         })

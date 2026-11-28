@@ -88,4 +88,15 @@ describe("API & MCP page", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create token" }));
     expect(await screen.findByText(/at most 20 active API tokens/)).toBeInTheDocument();
   });
+
+  it("shows an app that connected by signing in as a connected app, with Disconnect instead of Revoke", async () => {
+    tokens.list.mockResolvedValue([row({ name: "Claude", connectedApp: true, expiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString() })]);
+    tokens.revoke.mockResolvedValue({ revoked: true });
+    render(<ApiAccessPage />);
+    expect(await screen.findByText("connected app")).toBeInTheDocument();
+    expect(screen.getByText(/stays connected until/)).toBeInTheDocument();
+    expect(screen.queryByText(/envoy_sk_…/)).toBeNull(); // its token changes every hour; the tail would mean nothing
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect Claude" }));
+    await waitFor(() => expect(tokens.revoke).toHaveBeenCalledWith("t1"));
+  });
 });

@@ -37,11 +37,11 @@ A scenario's sandbox: knownContacts [{email, firstName?}] and busy [{start, end}
 const asText = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value, null, 2));
 
 /** Turns a tool's outcome into an MCP result. Failures become readable tool errors — never a thrown exception, never a stack trace. */
-export async function runTool(tool: ToolDef, api: EnvoyApi, args: unknown) {
+export async function runTool(tool: ToolDef, api: EnvoyApi, args: unknown, notice = UNTRUSTED_NOTICE) {
   try {
     const result = await tool.run(api, args);
     const content = [{ type: "text" as const, text: asText(result ?? { ok: true }) }];
-    return { content: tool.untrusted ? [{ type: "text" as const, text: UNTRUSTED_NOTICE }, ...content] : content };
+    return { content: tool.untrusted ? [{ type: "text" as const, text: notice }, ...content] : content };
   } catch (err) {
     const text =
       err instanceof EnvoyApiError

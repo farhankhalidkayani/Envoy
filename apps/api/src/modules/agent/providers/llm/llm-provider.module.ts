@@ -56,6 +56,6 @@ export const PLATFORM_LLM_PROVIDER = "PLATFORM_LLM_PROVIDER";
       },
     },
   ],
-  exports: [LLM_PROVIDER, PLATFORM_LLM_PROVIDER, ModelResolver, ModelProviderFactory],
+  exports: [LLM_PROVIDER, PLATFORM_LLM_PROVIDER, ModelResolver, ModelProviderFactory, ModelUsageRecorder],
 })
 export class LlmProviderModule {}

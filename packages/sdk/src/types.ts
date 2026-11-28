@@ -276,6 +276,8 @@ export interface ModelStatus {
   hasInvalidCredential: boolean;
   credentialCount: number;
   roles: Record<ModelRole, { source: "tenant" | "platform"; provider?: ModelProviderKind; model?: string }>;
+  /** Speech-to-text and text-to-speech. Set individually; never inherited from the text `default`. */
+  voice: Record<"stt" | "tts", { source: "tenant" | "platform"; provider?: ModelProviderKind; model?: string; voice?: string }>;
   config: ModelConfig;
 }
 
@@ -443,6 +445,17 @@ export interface ApiToken {
   revokedAt: string | null;
   lastUsedAt: string | null;
   createdAt: string;
+  /** Created by an app signing in (OAuth), not on the tokens page. It renews itself until `expiresAt`. */
+  connectedApp?: boolean;
+}
+
+/** What the consent page shows about an app asking to connect. */
+export interface OAuthConsentInfo {
+  client: { id: string; name: string };
+  /** Where the user goes back to afterwards: a host, or an app's own scheme. */
+  redirectHost: string;
+  requestedScopes: string[];
+  unknownScopes: string[];
 }
 
 /** Returned once, at creation: `token` is the only time the secret is ever visible. */
@@ -546,4 +559,17 @@ export interface ApprovalRequest {
   decidedAt: string | null;
   result: unknown;
   summary: ApprovalSummary | null;
+}
+
+/** An operator token as the API shows it: the secret only ever appears once, at creation. */
+export interface OperatorToken {
+  id: string;
+  name: string;
+  last4: string;
+  scopes: string[];
+  expiresAt: string;
+  revokedAt: string | null;
+  lastUsedAt: string | null;
+  createdAt: string;
+  createdBy: string;
 }

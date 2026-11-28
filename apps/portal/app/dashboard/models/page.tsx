@@ -7,11 +7,15 @@ import {
   MODEL_ROLES,
   PRESET_LABELS,
   PROVIDER_LABELS,
+  VOICE_CATALOG,
+  VOICE_ROLES,
   presetModels,
+  supportsVoiceRole,
   type ModelConfig,
   type ModelPreset,
   type ModelProviderKind,
   type ModelRole,
+  type VoiceRole,
 } from "@envoy/types";
 import { api } from "../../../lib/api";
 import { useAuth } from "../../../lib/auth";
@@ -24,6 +28,12 @@ const ROLE_LABELS: Record<ModelRole, { label: string; help: string }> = {
   extract: { label: "Data capture", help: "Pulls field values out of what visitors say." },
   summarize: { label: "Summaries", help: "Writes the AI summary of a finished conversation." },
 };
+
+const VOICE_LABELS: Record<VoiceRole, { label: string; help: string }> = {
+  stt: { label: "Listening", help: "Turns what a visitor says into text (speech-to-text)." },
+  tts: { label: "Speaking", help: "Reads the agent's reply aloud (text-to-speech)." },
+};
+const JOB_LABEL: Record<string, string> = { ...Object.fromEntries(Object.entries(ROLE_LABELS).map(([k, v]) => [k, v.label])), stt: "Listening", tts: "Speaking" };
 
 export default function ModelsPage() {
   const { user } = useAuth();
@@ -120,7 +130,7 @@ export default function ModelsPage() {
     setConfig((c) => ({ ...c, ...Object.fromEntries(MODEL_ROLES.map((r) => [r, { credentialId, model: models[r] }])) }));
   }
 
-  function setRole(role: ModelRole, patch: Partial<{ credentialId: string; model: string }> | null) {
+  function setRole(role: ModelRole | VoiceRole, patch: Partial<{ credentialId: string; model: string; voice: string }> | null) {
     setConfig((c) => {
       const next = { ...c } as Record<string, unknown>;
       if (patch === null) delete next[role];
@@ -132,9 +142,10 @@ export default function ModelsPage() {
   async function saveConfig() {
     setError(null);
     const cleaned = { ...config } as Record<string, unknown>;
-    for (const r of MODEL_ROLES) {
-      const choice = cleaned[r] as { credentialId: string; model: string } | undefined;
+    for (const r of [...MODEL_ROLES, ...VOICE_ROLES]) {
+      const choice = cleaned[r] as { credentialId: string; model: string; voice?: string } | undefined;
       if (choice && (!choice.credentialId || !choice.model.trim())) delete cleaned[r];
+      else if (choice && choice.voice !== undefined && !choice.voice.trim()) cleaned[r] = { credentialId: choice.credentialId, model: choice.model };
     }
     try {
       await api.models.setConfig(cleaned as ModelConfig);
@@ -272,6 +283,53 @@ export default function ModelsPage() {
             );
           })}
 
+          <strong style={{ fontSize: 13, display: "block", margin: "16px 0 4px" }}>Voice</strong>
+          <p style={{ fontSize: 11.5, color: "var(--ink-faint)", marginBottom: 10 }}>
+            For voice conversations. Set these on their own: a text model can&apos;t listen or speak. Only keys whose provider offers the job are listed.
+          </p>
+          {VOICE_ROLES.map((role) => {
+            const choice = config[role] as { credentialId: string; model: string; voice?: string } | undefined;
+            const capable = active.filter((c) => supportsVoiceRole(c.provider, role));
+            const provider = choice ? providerOf(choice.credentialId) : undefined;
+            const models = provider ? (VOICE_CATALOG[role][provider] ?? []) : [];
+            return (
+              <div key={role} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
+                <span style={{ width: 130, fontSize: 13 }} title={VOICE_LABELS[role].help}><b>{VOICE_LABELS[role].label}</b></span>
+                <select
+                  aria-label={`${VOICE_LABELS[role].label} key`}
+                  value={choice?.credentialId ?? ""}
+                  disabled={disabled}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    const p = id ? providerOf(id) : undefined;
+                    setRole(role, id && p ? { credentialId: id, model: VOICE_CATALOG[role][p]?.[0]?.id ?? "" } : null);
+                  }}
+                  style={{ width: 180 }}
+                >
+                  <option value="">Shared default</option>
+                  {capable.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                </select>
+                {choice && (
+                  <>
+                    <input aria-label={`${VOICE_LABELS[role].label} model`} list={`voice-models-${role}`} value={choice.model} disabled={disabled} onChange={(e) => setRole(role, { model: e.target.value })} placeholder="model name" style={{ width: 200 }} />
+                    <datalist id={`voice-models-${role}`}>{models.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}</datalist>
+                    {role === "tts" && (
+                      <input
+                        aria-label="Speaking voice"
+                        value={choice.voice ?? ""}
+                        disabled={disabled}
+                        onChange={(e) => setRole(role, { voice: e.target.value })}
+                        placeholder={`voice (default: ${VOICE_CATALOG.tts[provider!]?.[0]?.defaultVoice ?? "provider's"})`}
+                        style={{ width: 170 }}
+                      />
+                    )}
+                  </>
+                )}
+                {capable.length === 0 && <span style={{ fontSize: 11.5, color: "var(--ink-faint)" }}>Add {role === "stt" ? "an OpenAI or Groq" : "an OpenAI or Gemini"} key to use your own.</span>}
+              </div>
+            );
+          })}
+
           <label style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 12, fontSize: 12.5 }}>
             <input type="checkbox" checked={config.allowPlatformFallback} disabled={disabled} onChange={(e) => setConfig((c) => ({ ...c, allowPlatformFallback: e.target.checked }))} style={{ marginTop: 2 }} />
             <span>
@@ -293,7 +351,7 @@ export default function ModelsPage() {
             <tbody>
               {usage.rows.map((r, i) => (
                 <tr key={i}>
-                  <td>{r.model}</td><td>{r.role}</td>
+                  <td>{r.model}</td><td>{JOB_LABEL[r.role] ?? r.role}</td>
                   <td>{r.keySource === "tenant" ? "Your key" : "Shared default"}</td>
                   <td>{r.calls}</td><td>{r.inputTokens.toLocaleString()} / {r.outputTokens.toLocaleString()}</td><td>{r.failures}</td>
                 </tr>

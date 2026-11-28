@@ -22,18 +22,6 @@ export const ModelChoice = z.object({
 });
 export type ModelChoice = z.infer<typeof ModelChoice>;
 
-/** `default` serves every role that has no entry of its own. */
-export const ModelConfig = z.object({
-  default: ModelChoice.optional(),
-  chat: ModelChoice.optional(),
-  judge: ModelChoice.optional(),
-  extract: ModelChoice.optional(),
-  summarize: ModelChoice.optional(),
-  /** When a tenant key fails (rejected, out of quota, provider down), serve the request from the platform default instead of failing the visitor. */
-  allowPlatformFallback: z.boolean().default(true),
-});
-export type ModelConfig = z.infer<typeof ModelConfig>;
-
 export type ModelTier = "best" | "balanced" | "fast";
 
 export interface CatalogModel {
@@ -43,6 +31,67 @@ export interface CatalogModel {
 }
 
 /** Suggested models per provider. Advisory only — any model id the provider accepts can be typed in, and saving a key tests it. */
+/**
+ * Voice jobs: turning a visitor's speech into text (stt) and the agent's reply into speech (tts). Unlike the text
+ * roles they never inherit `default` — a chat model can't transcribe — so each is set on its own or stays on the
+ * platform's voice.
+ */
+export const VOICE_ROLES = ["stt", "tts"] as const;
+export const VoiceRole = z.enum(VOICE_ROLES);
+export type VoiceRole = z.infer<typeof VoiceRole>;
+
+export const TtsChoice = ModelChoice.extend({
+  /** The provider's voice name, e.g. "alloy" (OpenAI) or "Kore" (Gemini). Unset = the provider's default below. */
+  voice: z.string().trim().min(1).max(50).optional(),
+});
+export type TtsChoice = z.infer<typeof TtsChoice>;
+
+/** Which providers can do each voice job. Anthropic has no speech API. */
+export const VOICE_PROVIDERS: Record<VoiceRole, readonly ModelProviderKind[]> = {
+  stt: ["openai", "groq", "openai_compatible"],
+  tts: ["openai", "gemini", "openai_compatible"],
+};
+
+/** Suggested voice models, and the voice used when none is named. Advisory: any model id the provider accepts works. */
+export const VOICE_CATALOG: { stt: Partial<Record<ModelProviderKind, CatalogModel[]>>; tts: Partial<Record<ModelProviderKind, Array<CatalogModel & { defaultVoice: string }>>> } = {
+  stt: {
+    openai: [
+      { id: "gpt-4o-transcribe", label: "GPT-4o Transcribe", tier: "best" },
+      { id: "gpt-4o-mini-transcribe", label: "GPT-4o mini Transcribe", tier: "fast" },
+    ],
+    groq: [
+      { id: "whisper-large-v3", label: "Whisper large v3", tier: "best" },
+      { id: "whisper-large-v3-turbo", label: "Whisper large v3 turbo", tier: "fast" },
+    ],
+  },
+  tts: {
+    openai: [
+      { id: "gpt-4o-mini-tts", label: "GPT-4o mini TTS", tier: "best", defaultVoice: "alloy" },
+      { id: "tts-1", label: "TTS-1", tier: "fast", defaultVoice: "alloy" },
+    ],
+    gemini: [
+      { id: "gemini-2.5-pro-preview-tts", label: "Gemini 2.5 Pro TTS", tier: "best", defaultVoice: "Kore" },
+      { id: "gemini-2.5-flash-preview-tts", label: "Gemini 2.5 Flash TTS", tier: "fast", defaultVoice: "Kore" },
+    ],
+  },
+};
+
+export const supportsVoiceRole = (provider: ModelProviderKind, role: VoiceRole) => VOICE_PROVIDERS[role].includes(provider);
+
+/** `default` serves every TEXT role that has no entry of its own; voice roles are set individually. */
+export const ModelConfig = z.object({
+  default: ModelChoice.optional(),
+  chat: ModelChoice.optional(),
+  judge: ModelChoice.optional(),
+  extract: ModelChoice.optional(),
+  summarize: ModelChoice.optional(),
+  stt: ModelChoice.optional(),
+  tts: TtsChoice.optional(),
+  /** When a tenant key fails (rejected, out of quota, provider down), serve the request from the platform default instead of failing the visitor. */
+  allowPlatformFallback: z.boolean().default(true),
+});
+export type ModelConfig = z.infer<typeof ModelConfig>;
+
 export const MODEL_CATALOG: Record<Exclude<ModelProviderKind, "openai_compatible">, CatalogModel[]> = {
   anthropic: [
     { id: "claude-opus-5-5", label: "Claude Opus 5.5", tier: "best" },

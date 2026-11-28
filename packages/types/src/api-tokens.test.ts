@@ -103,3 +103,13 @@ describe("CreateApiTokenInput", () => {
     expect(CreateApiTokenInput.safeParse({ name: "CI", scopes: ["agents:read"], expiresInDays: 0 }).success).toBe(false);
   });
 });
+
+describe("token self-check", () => {
+  it("any token may read /token-info, whatever its scopes — and nothing else nearby", () => {
+    expect(decideTokenAccess("GET", "/token-info", ["approvals:read"]).allowed).toBe(true);
+    expect(decideTokenAccess("GET", "/token-info?x=1", ["agents:read"]).allowed).toBe(true);
+    expect(decideTokenAccess("POST", "/token-info", ["agents:write"]).allowed).toBe(false);
+    expect(decideTokenAccess("GET", "/token-info/extra", ["agents:read"]).allowed).toBe(false);
+    expect(decideTokenAccess("GET", "/token-info", []).allowed).toBe(false);
+  });
+});

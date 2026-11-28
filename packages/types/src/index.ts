@@ -13,3 +13,5 @@ export * from "./improvement.js";
 export * from "./api-tokens.js";
 export * from "./workflow.js";
 export * from "./approvals.js";
+export * from "./oauth.js";
+export * from "./operator-tokens.js";

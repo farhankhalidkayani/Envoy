@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import type { Prisma } from "@envoy/db";
 import {
   APPROVAL_KIND_LABELS,
@@ -13,7 +13,9 @@ import {
   type CreateApprovalInput,
 } from "@envoy/types";
 import { createHash } from "node:crypto";
+import { sendEmail } from "../../core/common/resend.js";
 import { PrismaService } from "../../core/prisma/prisma.service.js";
+import { RedisService } from "../../core/redis/redis.service.js";
 import { CrmService } from "../../crm/crm.service.js";
 import { IntegrationsService } from "../../integrations/integrations.service.js";
 import { AgentsService } from "../agents.service.js";
@@ -34,13 +36,21 @@ export interface ApprovalSummary {
   warnings: string[];
 }
 
+/** One email per workspace per this many seconds, however many requests arrive: it says how many are waiting. */
+export const APPROVAL_EMAIL_COOLDOWN_SEC = 15 * 60;
+/** Names in the email come from the workspace or the requesting app; keep them short and plainly quoted. */
+const quoted = (s: string) => `“${s.replace(/[\r\n]+/g, " ").slice(0, 60)}”`;
+
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 const ruleKey = (r: { id: string; text: string; action: string; severity: string }) => `${r.text}|${r.action}|${r.severity}`;
 
 @Injectable()
 export class ApprovalsService {
+  private readonly logger = new Logger(ApprovalsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
     private readonly agents: AgentsService,
     private readonly proposals: ProposalsService,
     private readonly scenarios: ScenariosService,
@@ -93,7 +103,36 @@ export class ApprovalsService {
       },
     });
     await this.prisma.client.auditLog.create({ data: { adminUserId: who.userId, tenantId, action: "approval.requested", meta: { approvalId: row.id, kind: params.kind, agentId: agent.id, by: row.requestedBy } } });
+    // Never let a mail problem fail the request itself; the portal count shows it either way.
+    void this.notifyOwners(tenantId, row.requestedBy, APPROVAL_KIND_LABELS[params.kind], agent.name).catch((err: Error) => this.logger.warn(`approval email failed: ${err.message}`));
     return this.view(row, tenantId);
+  }
+
+  /**
+   * Tells the workspace owner(s) that something is waiting. Deliberately minimal: it carries none of the requester's
+   * own words (its reason, or rule text it wrote) — those are only shown in the portal, next to the server's summary —
+   * so a manipulated assistant can't use our email to send the owner links or instructions.
+   */
+  private async notifyOwners(tenantId: string, requestedBy: string, kindLabel: string, agentName: string) {
+    const first = await this.redis.client.set(`approval-email:${tenantId}`, "1", "EX", APPROVAL_EMAIL_COOLDOWN_SEC, "NX");
+    if (first !== "OK") return; // already told them recently; they'll see the rest in the portal
+
+    const [owners, pending] = await Promise.all([
+      this.prisma.client.user.findMany({ where: { tenantId, role: "owner" }, select: { email: true } }),
+      this.prisma.client.approvalRequest.count({ where: { tenantId, status: "pending", expiresAt: { gt: new Date() } } }),
+    ]);
+    const portal = (process.env.PORTAL_URL ?? "http://localhost:3001").replace(/\/$/, "");
+    const subject = pending > 1 ? `${pending} requests are waiting for your approval in Envoy` : "A request is waiting for your approval in Envoy";
+    const text = [
+      `${quoted(requestedBy)} asked you to approve: ${kindLabel} (agent ${quoted(agentName)}).`,
+      pending > 1 ? `You have ${pending} requests waiting in total.` : "",
+      "",
+      "Nothing changes unless you approve it. Requests expire after 24 hours.",
+      `Review what it would do: ${portal}/dashboard/approvals`,
+      "",
+      "If you didn't expect this, you can disconnect the app or revoke its token under API & MCP.",
+    ].filter((l, i, a) => l !== "" || a[i - 1] !== "").join("\n");
+    await Promise.all(owners.map((o) => sendEmail(o.email, subject, text)));
   }
 
   /** Refuse requests that could not do anything, so the reviewer is never asked about a no-op. */

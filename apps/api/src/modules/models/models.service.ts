@@ -4,6 +4,8 @@ import {
   MODEL_CATALOG,
   MODEL_ROLES,
   ModelConfig,
+  VOICE_ROLES,
+  supportsVoiceRole,
   type ModelProviderKind,
   type ModelRole,
 } from "@envoy/types";
@@ -15,6 +17,8 @@ import { LlmHttpError } from "../agent/providers/llm/types.js";
 import { ModelProviderFactory } from "./provider-factory.js";
 
 const MAX_CREDENTIALS_PER_TENANT = 10;
+/** Every place in a model config that can point at a stored key. */
+const SLOTS = ["default", ...MODEL_ROLES, ...VOICE_ROLES] as const;
 
 export interface AddCredentialInput {
   provider: ModelProviderKind;
@@ -141,7 +145,7 @@ export class ModelsService {
     // Don't leave the workspace config pointing at a key that no longer exists.
     const config = await this.getConfig(tenantId);
     const cleaned: Record<string, unknown> = { ...config };
-    for (const slot of ["default", ...MODEL_ROLES]) {
+    for (const slot of SLOTS) {
       if ((cleaned[slot] as { credentialId?: string } | undefined)?.credentialId === id) delete cleaned[slot];
     }
     await this.prisma.client.tenant.update({ where: { id: tenantId }, data: { modelConfig: cleaned as Prisma.InputJsonValue } });
@@ -156,12 +160,19 @@ export class ModelsService {
 
   async setConfig(tenantId: string, actorUserId: string, config: ModelConfig): Promise<ModelConfig> {
     const referenced = new Set(
-      ["default", ...MODEL_ROLES].map((slot) => (config as unknown as Record<string, { credentialId?: string } | undefined>)[slot]?.credentialId).filter((v): v is string => !!v),
+      SLOTS.map((slot) => (config as unknown as Record<string, { credentialId?: string } | undefined>)[slot]?.credentialId).filter((v): v is string => !!v),
     );
     if (referenced.size > 0) {
-      const found = await this.prisma.client.modelCredential.findMany({ where: { tenantId, id: { in: [...referenced] } }, select: { id: true } });
+      const found = await this.prisma.client.modelCredential.findMany({ where: { tenantId, id: { in: [...referenced] } }, select: { id: true, provider: true } });
       // A credential id from another tenant looks identical to a missing one.
       if (found.length !== referenced.size) throw new BadRequestException("One of the selected API keys doesn't exist.");
+      for (const role of VOICE_ROLES) {
+        const choice = config[role];
+        const provider = choice && found.find((c) => c.id === choice.credentialId)?.provider;
+        if (provider && !supportsVoiceRole(provider, role)) {
+          throw new BadRequestException(`That key can't be used for ${role === "stt" ? "speech-to-text" : "text-to-speech"}: ${provider} doesn't offer it.`);
+        }
+      }
     }
     await this.prisma.client.tenant.update({ where: { id: tenantId }, data: { modelConfig: config as Prisma.InputJsonValue } });
     await this.audit.log(actorUserId, tenantId, "model_config.updated", { roles: [...referenced].length });
@@ -179,8 +190,17 @@ export class ModelsService {
         return [role, credential && choice ? { source: "tenant" as const, provider: credential.provider, model: choice.model } : { source: "platform" as const }];
       }),
     ) as Record<ModelRole, { source: "tenant" | "platform"; provider?: ModelProviderKind; model?: string }>;
+    // Voice: set individually, never inherited from `default`.
+    const voice = Object.fromEntries(
+      VOICE_ROLES.map((role) => {
+        const choice = config[role];
+        const credential = choice ? active.get(choice.credentialId) : undefined;
+        return [role, credential && choice ? { source: "tenant" as const, provider: credential.provider, model: choice.model, ...(role === "tts" && config.tts?.voice ? { voice: config.tts.voice } : {}) } : { source: "platform" as const }];
+      }),
+    ) as Record<"stt" | "tts", { source: "tenant" | "platform"; provider?: ModelProviderKind; model?: string; voice?: string }>;
     return {
       usingPlatformDefault: !Object.values(roles).some((r) => r.source === "tenant"),
+      voice,
       hasInvalidCredential: credentials.some((c) => c.status === "invalid"),
       credentialCount: credentials.length,
       roles,

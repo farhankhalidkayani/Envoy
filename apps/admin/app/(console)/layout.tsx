@@ -4,13 +4,14 @@ import { useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "../../lib/auth";
-import { BuildingIcon, ClockListIcon, AlertIcon, LogoMark } from "../../components/icons";
+import { BuildingIcon, ClockListIcon, AlertIcon, LogoMark, SparkIcon } from "../../components/icons";
 import { ThemeToggle } from "../../components/ThemeToggle";
 
 const NAV = [
   { href: "/tenants", label: "Tenants", icon: BuildingIcon },
   { href: "/jobs", label: "Failed Jobs", icon: AlertIcon },
   { href: "/audit-log", label: "Audit Log", icon: ClockListIcon },
+  { href: "/ai-access", label: "AI access", icon: SparkIcon },
 ];
 
 export default function ConsoleLayout({ children }: { children: ReactNode }) {

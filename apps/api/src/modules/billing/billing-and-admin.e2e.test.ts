@@ -25,6 +25,7 @@ describe("billing lock/unlock + admin operator API (e2e)", () => {
   let publicToken: string;
   let ownerUserId: string;
 
+  let adminEmail = "";
   let adminToken: string;
 
   async function json<T = unknown>(res: Response): Promise<T> {
@@ -78,7 +79,7 @@ describe("billing lock/unlock + admin operator API (e2e)", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        email: `admin-${suffix}@test.dev`,
+        email: (adminEmail = `admin-${suffix}@test.dev`),
         password: "hunter22",
         bootstrapSecret: process.env.ADMIN_BOOTSTRAP_SECRET,
       }),
@@ -89,6 +90,7 @@ describe("billing lock/unlock + admin operator API (e2e)", () => {
   afterAll(async () => {
     delete process.env.STRIPE_WEBHOOK_ALLOW_UNSIGNED;
     await prisma.tenant.deleteMany({ where: { id: tenantId } }); // cascades agent + subscription
+    await prisma.user.deleteMany({ where: { email: adminEmail } }); // don't leave the test admin behind
     await app.close();
   });
 

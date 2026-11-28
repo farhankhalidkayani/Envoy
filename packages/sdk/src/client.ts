@@ -7,6 +7,8 @@ import type {
   AgentVersion,
   ApiToken,
   ApprovalRequest,
+  OAuthConsentInfo,
+  OperatorToken,
   AuditLogEntry,
   AuthResult,
   CreatedApiToken,
@@ -256,6 +258,13 @@ export function createApiClient(config: ApiClientConfig) {
       reject: (id: string) => request<{ status: "rejected" }>(`/approvals/${id}/reject`, { method: "POST" }),
     },
 
+    /** The consent step of an app connecting by OAuth. Owner only. Each may instead return `redirect_to` (send the browser back to the app). */
+    oauth: {
+      describe: (query: Record<string, string>) => request<OAuthConsentInfo | { redirect_to: string }>("/oauth/authorize/describe", { query }),
+      approve: (query: Record<string, string>, scopes: string[]) => request<{ redirect_to: string }>("/oauth/authorize", { method: "POST", body: { ...query, scopes } }),
+      deny: (query: Record<string, string>) => request<{ redirect_to: string }>("/oauth/authorize/deny", { method: "POST", body: query }),
+    },
+
     tokens: {
       list: () => request<ApiToken[]>("/tokens"),
       create: (input: { name: string; scopes: string[]; expiresInDays?: number }) => request<CreatedApiToken>("/tokens", { method: "POST", body: input }),
@@ -409,6 +418,12 @@ export function createApiClient(config: ApiClientConfig) {
         request<void>(`/admin/tenants/${tenantId}/pricing`, { method: "PATCH", body: priceConfig }),
       listAuditLog: (tenantId?: string) =>
         request<AuditLogEntry[]>("/admin/audit-log", { query: { tenantId } }),
+      /** Tokens for the operator's AI assistant (the operator MCP server). */
+      operatorTokens: {
+        list: () => request<OperatorToken[]>("/admin/operator-tokens"),
+        create: (input: { name: string; scopes: string[]; expiresInDays: number }) => request<OperatorToken & { token: string }>("/admin/operator-tokens", { method: "POST", body: input }),
+        revoke: (id: string) => request<{ revoked: true }>(`/admin/operator-tokens/${id}`, { method: "DELETE" }),
+      },
       listFailedJobs: () =>
         request<
           Array<{
